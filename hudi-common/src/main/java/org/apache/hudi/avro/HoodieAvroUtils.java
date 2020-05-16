@@ -18,13 +18,15 @@
 
 package org.apache.hudi.avro;
 
-import org.apache.avro.JsonProperties.Null;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.exception.SchemaCompatabilityException;
 
+import com.google.common.collect.Lists;
+import org.apache.avro.JsonProperties.Null;
 import org.apache.avro.Schema;
 import org.apache.avro.Schema.Field;
+import org.apache.avro.Schema.Type;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericDatumWriter;
@@ -47,9 +49,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
@@ -58,6 +62,8 @@ import java.util.zip.InflaterInputStream;
  * Helper class to do common stuff across Avro.
  */
 public class HoodieAvroUtils {
+
+  public static final Schema NULL_SCHEMA = Schema.create(Type.NULL);
 
   private static ThreadLocal<BinaryEncoder> reuseEncoder = ThreadLocal.withInitial(() -> null);
 
@@ -307,6 +313,126 @@ public class HoodieAvroUtils {
       return new String(baos.toByteArray(), StandardCharsets.UTF_8);
     } catch (IOException e) {
       throw new HoodieIOException("IOException while decompressing text", e);
+    }
+  }
+
+  /**
+   * This method rewrites passed avro schema to make sure:
+   * If the union has null element it should be the first and default value should be set to null.
+   *
+   * @param schema schema to modify
+   */
+  public static Schema rewriteIncorrectDefaults(Schema schema) {
+    rewriteIncorrectDefaults(schema, new HashSet<>());
+    return getSchemaFromMaybeUnion(schema);
+  }
+
+  private static Schema getSchemaFromMaybeUnion(Schema schema) {
+    if (!Type.UNION.equals(schema.getType())) {
+      return schema;
+    } else {
+      return schema.getTypes().stream()
+          .filter(type -> !type.getName().equals(Type.NULL.getName().toLowerCase()))
+          .findFirst()
+          .get();
+    }
+  }
+
+  /**
+   * This method rewrites passed avro schema to make sure that all the types are nullable and
+   * have correct default value set to null. Having not null columns in this schema can result
+   * in breakages down the road (especially in compaction logic).
+   *
+   * @param schema schema to modify
+   * @param visited set used to prevent infinite loops.
+   */
+  private static void rewriteIncorrectDefaults(Schema schema, Set<Schema> visited) {
+    // Mark schema as visited to avoid infinite loop.
+    if (visited.contains(schema)) {
+      return;
+    }
+
+    visited.add(schema);
+
+    switch (schema.getType()) {
+      case RECORD:
+        for (Field field : schema.getFields()) {
+          if (Type.UNION.equals(field.schema().getType())) {
+            List<Schema> unionTypes = new ArrayList<>();
+            unionTypes.add(NULL_SCHEMA);
+            for (Schema typeSchema : field.schema().getTypes()) {
+              if (!typeSchema.getName().equals(Type.NULL.getName().toLowerCase())) {
+                unionTypes.add(typeSchema);
+              }
+            }
+
+            resetTypes(field, unionTypes);
+          }
+
+          try {
+            java.lang.reflect.Field defaultValueField =
+                field.getClass().getDeclaredField("defaultValue");
+            defaultValueField.setAccessible(true);
+            defaultValueField.set(field, NullNode.getInstance());
+          } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+          }
+
+          rewriteIfNonUnionSimple(field);
+          rewriteIncorrectDefaults(field.schema(), visited);
+        }
+
+        break;
+      case UNION:
+        for (Schema typeSchema : schema.getTypes()) {
+          // Make sure null is first.
+          rewriteIncorrectDefaults(typeSchema, visited);
+        }
+        break;
+      case ARRAY:
+        rewriteIncorrectDefaults(schema.getElementType(), visited);
+        break;
+      case MAP:
+        rewriteIncorrectDefaults(schema.getValueType(), visited);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /**
+   * Resets types of the field.
+   */
+  private static void resetTypes(Field field, List<Schema> unionTypes) {
+    Schema newUnionSchema = Schema.createUnion(unionTypes);
+    try {
+      java.lang.reflect.Field schemaField = field.getClass().getDeclaredField("schema");
+      schemaField.setAccessible(true);
+      schemaField.set(field, newUnionSchema);
+    } catch (NoSuchFieldException | IllegalAccessException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Rewrites schema for a simple type which is not part of union.
+   * @param field
+   */
+  private static void rewriteIfNonUnionSimple(Field field) {
+    Schema fieldSchema = field.schema();
+    switch (fieldSchema.getType()) {
+      case FIXED:
+      case STRING:
+      case BYTES:
+      case INT:
+      case LONG:
+      case FLOAT:
+      case DOUBLE:
+      case BOOLEAN:
+        resetTypes(field, Lists.newArrayList(NULL_SCHEMA, fieldSchema));
+        break;
+      default:
+        break;
     }
   }
 }

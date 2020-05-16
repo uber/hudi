@@ -18,7 +18,11 @@
 
 package org.apache.hudi.avro;
 
+import java.util.Map;
+import org.apache.avro.JsonProperties.Null;
 import org.apache.avro.Schema;
+import org.apache.avro.Schema.Field;
+import org.apache.avro.Schema.Type;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.Test;
@@ -54,6 +58,12 @@ public class TestHoodieAvroUtils {
       + "{\"name\": \"pii_col\", \"type\": \"string\", \"column_category\": \"user_profile\"},"
       + "{\"name\": \"_hoodie_commit_time\", \"type\": [\"null\", \"string\"]},"
       + "{\"name\": \"nullable_field\",\"type\": [\"null\" ,\"string\"],\"default\": null}]}";
+
+  private static String SCHEMA_WITH_UNIONS = "{\"type\": \"record\",\"name\": \"testrec\",\"fields\":"
+      + " [{\"name\": \"recordWithoutDefault\",\"type\": [\"null\",{\"type\": \"record\",\"name\": \"Record\",\"fields\": "
+      + "[{\"name\": \"fieldWithWrongTypeSort\",\"type\": [\"string\",\"null\"]}]}]},"
+      + "{\"name\": \"fieldWithoutDefault\",\"type\": \"string\"},{\"name\": \"fieldWithNoNullType\",\"type\": "
+      + "[\"string\",\"boolean\"]}]}";
 
   @Test
   public void testPropsPresent() {
@@ -111,5 +121,37 @@ public class TestHoodieAvroUtils {
     rec.put("timestamp", 3.5);
     GenericRecord rec1 = HoodieAvroUtils.rewriteRecord(rec, new Schema.Parser().parse(SCHEMA_WITH_METADATA_FIELD));
     assertNull(rec1.get("_hoodie_commit_time"));
+  }
+
+  @Test
+  public void testRewriteIncorrectDefaults() {
+    Schema schema = new Schema.Parser().parse(SCHEMA_WITH_UNIONS);
+
+    HoodieAvroUtils.rewriteIncorrectDefaults(schema);
+    Field updatedRecord = schema.getFields().get(0);
+    Assert.assertTrue(updatedRecord.defaultVal() instanceof Null);
+    Assert.assertEquals(updatedRecord.schema().getTypes().size(), 2);
+    Assert.assertEquals(updatedRecord.schema().getTypes().get(0).getType(), Type.NULL);
+    Assert.assertEquals(updatedRecord.schema().getTypes().get(1).getType(), Type.RECORD);
+
+    Field updatedUnion = schema.getFields().get(0).schema().getTypes().get(1).getFields().get(0);
+    Assert.assertTrue(updatedUnion.defaultVal() instanceof Null);
+    Assert.assertEquals(updatedUnion.schema().getTypes().size(), 2);
+    Assert.assertEquals(updatedUnion.schema().getTypes().get(0).getType(), Type.NULL);
+    Assert.assertEquals(updatedUnion.schema().getTypes().get(1).getType(), Type.STRING);
+
+    Field notNullString = schema.getFields().get(1);
+    Assert.assertEquals(notNullString.schema().getType(), Type.UNION);
+    Assert.assertEquals(notNullString.schema().getTypes().size(), 2);
+    Assert.assertEquals(notNullString.schema().getTypes().get(0).getType(), Type.NULL);
+    Assert.assertEquals(notNullString.schema().getTypes().get(1).getType(), Type.STRING);
+
+    Field notNullUnion = schema.getFields().get(2);
+    Assert.assertTrue(notNullUnion.defaultVal() instanceof Null);
+    Assert.assertEquals(notNullUnion.schema().getType(), Type.UNION);
+    Assert.assertEquals(notNullUnion.schema().getTypes().size(), 3);
+    Assert.assertEquals(notNullUnion.schema().getTypes().get(0).getType(), Type.NULL);
+    Assert.assertEquals(notNullUnion.schema().getTypes().get(1).getType(), Type.STRING);
+    Assert.assertEquals(notNullUnion.schema().getTypes().get(2).getType(), Type.BOOLEAN);
   }
 }
