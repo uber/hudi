@@ -48,7 +48,6 @@ import org.apache.spark.Accumulator;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.launcher.SparkLauncher;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.execution.datasources.jdbc.DriverRegistry;
 import org.apache.spark.sql.execution.datasources.jdbc.DriverWrapper;
@@ -78,6 +77,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 /**
  * Bunch of helper methods.
@@ -152,6 +152,7 @@ public class UtilHelpers {
   }
 
   public static TypedProperties buildProperties(List<String> props) {
+    props = validateProperties(props);
     TypedProperties properties = new TypedProperties();
     props.forEach(x -> {
       String[] kv = x.split("=");
@@ -161,8 +162,12 @@ public class UtilHelpers {
     return properties;
   }
 
-  public static void validateAndAddProperties(String[] configs, SparkLauncher sparkLauncher) {
-    Arrays.stream(configs).filter(config -> config.contains("=") && config.split("=").length == 2).forEach(sparkLauncher::addAppArgs);
+  public static String[] validateProperties(String[] configs) {
+    return Arrays.stream(configs).filter(config -> config.contains("=") && config.split("=").length == 2).toArray(String[]::new);
+  }
+
+  private static List<String> validateProperties(List<String> props) {
+    return props.stream().filter(prop -> prop.contains("=") && prop.split("=").length == 2).collect(Collectors.toList());
   }
 
   /**

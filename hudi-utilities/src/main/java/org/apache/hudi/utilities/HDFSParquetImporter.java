@@ -32,7 +32,6 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.exception.HoodieIOException;
 
 import com.beust.jcommander.IValueValidator;
-import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import org.apache.avro.Schema;
@@ -41,6 +40,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hudi.utilities.config.AbstractCommandConfig;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.parquet.avro.AvroReadSupport;
@@ -84,11 +84,7 @@ public class HDFSParquetImporter implements Serializable {
 
   public static void main(String[] args) {
     final Config cfg = new Config();
-    JCommander cmd = new JCommander(cfg, null, args);
-    if (cfg.help || args.length == 0) {
-      cmd.usage();
-      System.exit(1);
-    }
+    cfg.parseCommandConfig(args, true, true);
     HDFSParquetImporter dataImporter = new HDFSParquetImporter(cfg);
     JavaSparkContext jssc =
         UtilHelpers.buildSparkContext("data-importer-" + cfg.tableName, cfg.sparkMaster, cfg.sparkMemory);
@@ -243,7 +239,7 @@ public class HDFSParquetImporter implements Serializable {
     }
   }
 
-  public static class Config implements Serializable {
+  public static class Config extends AbstractCommandConfig {
 
     @Parameter(names = {"--command", "-c"}, description = "Write command Valid values are insert(default)/upsert/bulkinsert",
         validateValueWith = CommandValidator.class)
@@ -279,7 +275,5 @@ public class HDFSParquetImporter implements Serializable {
     @Parameter(names = {"--hoodie-conf"}, description = "Any configuration that can be set in the properties file "
         + "(using the CLI parameter \"--propsFilePath\") can also be passed command line using this parameter")
     public List<String> configs = new ArrayList<>();
-    @Parameter(names = {"--help", "-h"}, help = true)
-    public Boolean help = false;
   }
 }

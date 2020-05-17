@@ -34,6 +34,7 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.NumericUtils;
 import org.apache.hudi.common.util.StringUtils;
+import org.apache.hudi.utilities.HoodieRollback;
 
 import org.apache.spark.launcher.SparkLauncher;
 import org.springframework.shell.core.CommandMarker;
@@ -215,7 +216,7 @@ public class CommitsCommand implements CommandMarker {
   }
 
   @CliCommand(value = "commits refresh", help = "Refresh the commits")
-  public String refreshCommits() throws IOException {
+  public String refreshCommits() {
     HoodieCLI.refreshTableMetadata();
     return "Metadata for table " + HoodieCLI.getTableMetaClient().getTableConfig().getTableName() + " refreshed.";
   }
@@ -232,8 +233,13 @@ public class CommitsCommand implements CommandMarker {
     }
 
     SparkLauncher sparkLauncher = SparkUtil.initLauncher(sparkPropertiesPath);
-    sparkLauncher.addAppArgs(SparkMain.SparkCommand.ROLLBACK.toString(), instantTime,
-        HoodieCLI.getTableMetaClient().getBasePath());
+
+    HoodieRollback.Config config = new HoodieRollback.Config();
+    config.basePath = HoodieCLI.getTableMetaClient().getBasePath();
+    config.instantTime = instantTime;
+    String[] commandConfig = config.getCommandConfigsAsStringArray(SparkMain.SparkCommand.ROLLBACK.name());
+
+    sparkLauncher.addAppArgs(commandConfig);
     Process process = sparkLauncher.launch();
     InputStreamConsumer.captureOutput(process);
     int exitCode = process.waitFor();
@@ -344,8 +350,7 @@ public class CommitsCommand implements CommandMarker {
   }
 
   @CliCommand(value = "commits compare", help = "Compare commits with another Hoodie table")
-  public String compareCommits(@CliOption(key = {"path"}, help = "Path of the table to compare to") final String path)
-      throws Exception {
+  public String compareCommits(@CliOption(key = {"path"}, help = "Path of the table to compare to") final String path) {
 
     HoodieTableMetaClient source = HoodieCLI.getTableMetaClient();
     HoodieTableMetaClient target = new HoodieTableMetaClient(HoodieCLI.conf, path);

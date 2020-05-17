@@ -29,9 +29,10 @@ import org.apache.hudi.cli.utils.SparkUtil;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieActiveTimeline;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.util.StringUtils;
+import org.apache.hudi.utilities.HoodieCleaner;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.timeline.TimelineMetadataUtils;
-import org.apache.hudi.utilities.UtilHelpers;
 
 import org.apache.spark.launcher.SparkLauncher;
 import org.apache.spark.util.Utils;
@@ -43,6 +44,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -143,9 +145,17 @@ public class CleansCommand implements CommandMarker {
         Utils.getDefaultPropertiesFile(JavaConverters.mapAsScalaMapConverter(System.getenv()).asScala());
     SparkLauncher sparkLauncher = SparkUtil.initLauncher(sparkPropertiesPath);
 
-    String cmd = SparkMain.SparkCommand.CLEAN.toString();
-    sparkLauncher.addAppArgs(cmd, master, sparkMemory, metaClient.getBasePath(), propsFilePath);
-    UtilHelpers.validateAndAddProperties(configs, sparkLauncher);
+    HoodieCleaner.Config config = new HoodieCleaner.Config();
+    config.configs = Arrays.asList(configs);
+    if (!StringUtils.isNullOrEmpty(propsFilePath)) {
+      config.propsFilePath = propsFilePath;
+    }
+    config.basePath = metaClient.getBasePath();
+    config.sparkMaster = master;
+    config.sparkMemory = sparkMemory;
+    String[] commandConfig = config.getCommandConfigsAsStringArray(SparkMain.SparkCommand.CLEAN.toString());
+    sparkLauncher.addAppArgs(commandConfig);
+
     Process process = sparkLauncher.launch();
     InputStreamConsumer.captureOutput(process);
     int exitCode = process.waitFor();

@@ -36,6 +36,7 @@ import org.apache.hudi.common.table.timeline.TimelineMetadataUtils;
 import org.apache.hudi.common.table.timeline.versioning.TimelineLayoutVersion;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hudi.utilities.HoodieCleaner;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.shell.core.CommandResult;
@@ -106,7 +107,11 @@ public class TestCleansCommand extends AbstractShellIntegrationTest {
     Files.createFile(Paths.get(tablePath,
         HoodieTestCommitMetadataGenerator.DEFAULT_FIRST_PARTITION_PATH,
         HoodiePartitionMetadata.HOODIE_PARTITION_METAFILE));
-    SparkMain.clean(jsc, HoodieCLI.basePath, propsFilePath.getPath(), new ArrayList<>());
+    HoodieCleaner.Config config = new HoodieCleaner.Config();
+    config.basePath = HoodieCLI.basePath;
+    config.propsFilePath = propsFilePath.getPath();
+    config.configs = new ArrayList<>();
+    SparkMain.clean(jsc, config);
     assertEquals(1, metaClient.getActiveTimeline().reload().getCleanerTimeline().getInstants().count(),
         "Loaded 1 clean and the count should match");
 
@@ -146,7 +151,11 @@ public class TestCleansCommand extends AbstractShellIntegrationTest {
     Files.createFile(Paths.get(tablePath,
         HoodieTestCommitMetadataGenerator.DEFAULT_SECOND_PARTITION_PATH,
         HoodiePartitionMetadata.HOODIE_PARTITION_METAFILE));
-    SparkMain.clean(jsc, HoodieCLI.basePath, propsFilePath.toString(), new ArrayList<>());
+    HoodieCleaner.Config config = new HoodieCleaner.Config();
+    config.basePath = HoodieCLI.basePath;
+    config.propsFilePath = propsFilePath.toString();
+    config.configs = new ArrayList<>();
+    SparkMain.clean(jsc, config);
     assertEquals(1, metaClient.getActiveTimeline().reload().getCleanerTimeline().getInstants().count(),
         "Loaded 1 clean and the count should match");
 
