@@ -297,6 +297,7 @@ public class HoodieTableFileSystemView extends IncrementalTimelineSyncFileSystem
   public void close() {
     closed = true;
     super.reset();
+    partitionToFileGroupsMap.clear();
     partitionToFileGroupsMap = null;
     fgIdToPendingCompaction = null;
     fgIdToBootstrapBaseFile = null;

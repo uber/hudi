@@ -46,6 +46,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Stream;
 
 /**
@@ -53,12 +54,12 @@ import java.util.stream.Stream;
  * without any rollover support. It uses the following : 1) An in-memory map that tracks the key-> latest ValueMetadata.
  * 2) Current position in the file NOTE : Only String.class type supported for Key
  */
-public final class DiskBasedMap<T extends Serializable, R extends Serializable> implements Map<T, R>, Iterable<R> {
+public final class DiskBasedMap<K extends Serializable, V extends Serializable> implements Map<K, V>, Iterable<V> {
 
   public static final int BUFFER_SIZE = 128 * 1024;  // 128 KB
   private static final Logger LOG = LogManager.getLogger(DiskBasedMap.class);
   // Stores the key and corresponding value's latest metadata spilled to disk
-  private final Map<T, ValueMetadata> valueMetadataMap;
+  private final Map<K, ValueMetadata> valueMetadataMap;
   // Write only file
   private File writeOnlyFile;
   // Write only OutputStream to be able to ONLY append to the file
@@ -73,6 +74,13 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
   // Thread-safe random access file
   private ThreadLocal<BufferedRandomAccessFile> randomAccessFile = new ThreadLocal<>();
   private Queue<BufferedRandomAccessFile> openedAccessFiles = new ConcurrentLinkedQueue<>();
+
+  // Locks to control concurrency.
+  // Cleanup operations use a write lock read operations use a read lock
+  // Adding this to ensure read operations are n
+  private final ReentrantReadWriteLock globalLock = new ReentrantReadWriteLock();
+  private final ReentrantReadWriteLock.ReadLock readLock = globalLock.readLock();
+  private final ReentrantReadWriteLock.WriteLock writeLock = globalLock.writeLock();
 
   public DiskBasedMap(String baseFilePath) throws IOException {
     this.valueMetadataMap = new ConcurrentHashMap<>();
@@ -96,6 +104,7 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
         readHandle = new BufferedRandomAccessFile(filePath, "r", BUFFER_SIZE);
         readHandle.seek(0);
         randomAccessFile.set(readHandle);
+        // needed for cleanup
         openedAccessFiles.offer(readHandle);
       }
       return readHandle;
@@ -126,33 +135,7 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
    * (typically 4 KB) to disk.
    */
   private void addShutDownHook() {
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      public void run() {
-        try {
-          if (writeOnlyFileHandle != null) {
-            writeOnlyFileHandle.flush();
-            fileOutputStream.getChannel().force(false);
-            writeOnlyFileHandle.close();
-          }
-
-          while (!openedAccessFiles.isEmpty()) {
-            BufferedRandomAccessFile file = openedAccessFiles.poll();
-            if (null != file) {
-              try {
-                file.close();
-              } catch (IOException ioe) {
-                // skip exception
-              }
-            }
-          }
-          writeOnlyFile.delete();
-        } catch (Exception e) {
-          // delete the file for any sort of exception
-          writeOnlyFile.delete();
-        }
-      }
-    });
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> cleanup()));
   }
 
   private void flushToDisk() {
@@ -167,8 +150,13 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
    * Custom iterator to iterate over values written to disk.
    */
   @Override
-  public Iterator<R> iterator() {
-    return new LazyFileIterable(filePath, valueMetadataMap).iterator();
+  public Iterator<V> iterator() {
+    try {
+      readLock.lock();
+      return new LazyFileIterable(filePath, valueMetadataMap).iterator();
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
@@ -199,15 +187,20 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
   }
 
   @Override
-  public R get(Object key) {
-    ValueMetadata entry = valueMetadataMap.get(key);
-    if (entry == null) {
-      return null;
+  public V get(Object key) {
+    try {
+      readLock.lock();
+      ValueMetadata entry = valueMetadataMap.get(key);
+      if (entry == null) {
+        return null;
+      }
+      return get(entry);
+    } finally {
+      readLock.unlock();
     }
-    return get(entry);
   }
 
-  private R get(ValueMetadata entry) {
+  private V get(ValueMetadata entry) {
     return get(entry, getRandomAccessFile());
   }
 
@@ -220,17 +213,22 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
     }
   }
 
-  private synchronized R put(T key, R value, boolean flush) {
+  private synchronized V put(K key, V value, boolean flush) {
     try {
+      if (!writeOnlyFile.exists()) {
+        initFile(writeOnlyFile);
+      }
       byte[] val = SerializationUtils.serialize(value);
       Integer valueSize = val.length;
       Long timestamp = System.currentTimeMillis();
-      this.valueMetadataMap.put(key,
-          new DiskBasedMap.ValueMetadata(this.filePath, valueSize, filePosition.get(), timestamp));
+      Long currentOffset = filePosition.get();
       byte[] serializedKey = SerializationUtils.serialize(key);
       filePosition
           .set(SpillableMapUtils.spillToDisk(writeOnlyFileHandle, new FileEntry(SpillableMapUtils.generateChecksum(val),
               serializedKey.length, valueSize, serializedKey, val, timestamp)));
+      // Do not change order to update metadata map after writing to disk
+      valueMetadataMap.put(key,
+              new DiskBasedMap.ValueMetadata(valueSize, currentOffset, timestamp));
       if (flush) {
         flushToDisk();
       }
@@ -241,51 +239,86 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
   }
 
   @Override
-  public R put(T key, R value) {
+  public V put(K key, V value) {
     return put(key, value, true);
   }
 
   @Override
-  public R remove(Object key) {
-    R value = get(key);
+  public V remove(Object key) {
+    V value = get(key);
     valueMetadataMap.remove(key);
     return value;
   }
 
   @Override
-  public void putAll(Map<? extends T, ? extends R> m) {
-    for (Map.Entry<? extends T, ? extends R> entry : m.entrySet()) {
+  public void putAll(Map<? extends K, ? extends V> m) {
+    for (Map.Entry<? extends K, ? extends V> entry : m.entrySet()) {
       put(entry.getKey(), entry.getValue(), false);
     }
     flushToDisk();
   }
 
-  @Override
-  public void clear() {
+  private void cleanup() {
+    // Clearing valueMetadataMap first would ensure none of the future gets would attempt to read the file/file-handles
     valueMetadataMap.clear();
-    // Do not delete file-handles & file as there is no way to do it without synchronizing get/put(and
-    // reducing concurrency). Instead, just clear the pointer map. The file will be removed on exit.
+    try {
+      writeLock.lock();
+      if (writeOnlyFileHandle != null) {
+        writeOnlyFileHandle.flush();
+        fileOutputStream.getChannel().force(false);
+        writeOnlyFileHandle.close();
+      }
+
+      while (!openedAccessFiles.isEmpty()) {
+        BufferedRandomAccessFile file = openedAccessFiles.poll();
+        if (null != file) {
+          try {
+            file.close();
+          } catch (IOException ioe) {
+            // skip exception
+          }
+        }
+      }
+      writeOnlyFile.delete();
+      randomAccessFile = new ThreadLocal<>();
+    } catch (Exception e) {
+      // delete the file for any sort of exception
+      writeOnlyFile.delete();
+    } finally {
+      writeLock.unlock();
+    }
   }
 
   @Override
-  public Set<T> keySet() {
+  public synchronized void clear() throws HoodieException {
+    // Clear is synchronized alongside put
+    // Get and clear have a readwrite lock to maintain synchronization
+    cleanup();
+  }
+
+  @Override
+  public Set<K> keySet() {
     return valueMetadataMap.keySet();
   }
 
   @Override
-  public Collection<R> values() {
+  public Collection<V> values() {
     throw new HoodieException("Unsupported Operation Exception");
   }
 
-  public Stream<R> valueStream() {
-    final BufferedRandomAccessFile file = getRandomAccessFile();
-    return valueMetadataMap.values().stream().sorted().sequential().map(valueMetaData -> (R) get(valueMetaData, file));
+  public Stream<V> valueStream() {
+    try {
+      readLock.lock();
+      return valueMetadataMap.values().stream().sorted().sequential().map(valueMetaData -> (V) get(valueMetaData));
+    } finally {
+      readLock.unlock();
+    }
   }
 
   @Override
-  public Set<Entry<T, R>> entrySet() {
-    Set<Entry<T, R>> entrySet = new HashSet<>();
-    for (T key : valueMetadataMap.keySet()) {
+  public Set<Entry<K, V>> entrySet() {
+    Set<Entry<K, V>> entrySet = new HashSet<>();
+    for (K key : valueMetadataMap.keySet()) {
       entrySet.add(new AbstractMap.SimpleEntry<>(key, get(key)));
     }
     return entrySet;
@@ -347,9 +380,6 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
    * The value relevant metadata.
    */
   public static final class ValueMetadata implements Comparable<ValueMetadata> {
-
-    // FilePath to store the spilled data
-    private String filePath;
     // Size (numberOfBytes) of the value written to disk
     private Integer sizeOfValue;
     // FilePosition of the value written to disk
@@ -357,15 +387,10 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
     // Current timestamp when the value was written to disk
     private Long timestamp;
 
-    protected ValueMetadata(String filePath, int sizeOfValue, long offsetOfValue, long timestamp) {
-      this.filePath = filePath;
+    protected ValueMetadata(int sizeOfValue, long offsetOfValue, long timestamp) {
       this.sizeOfValue = sizeOfValue;
       this.offsetOfValue = offsetOfValue;
       this.timestamp = timestamp;
-    }
-
-    public String getFilePath() {
-      return filePath;
     }
 
     public int getSizeOfValue() {
@@ -382,7 +407,7 @@ public final class DiskBasedMap<T extends Serializable, R extends Serializable> 
 
     @Override
     public int compareTo(ValueMetadata o) {
-      return Long.compare(this.offsetOfValue, o.offsetOfValue);
+      return Long.compare(offsetOfValue, o.offsetOfValue);
     }
   }
 }
