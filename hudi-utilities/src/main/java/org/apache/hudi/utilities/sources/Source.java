@@ -78,6 +78,15 @@ public abstract class Source<T> implements Serializable {
         : new InputBatch<>(batch.getBatch(), batch.getCheckpointForNextBatch(), overriddenSchemaProvider);
   }
 
+  /**
+   * Called after a new batch is committed successfully. Can be used to clean up source if necessary.
+   *
+   */
+  @PublicAPIMethod(maturity = ApiMaturityLevel.EVOLVING)
+  public void postCommit() {
+    // no-op
+  }
+
   public SourceType getSourceType() {
     return sourceType;
   }
