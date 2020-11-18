@@ -33,7 +33,8 @@ import org.apache.hudi.common.util.CollectionUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.hive.HiveSyncConfig;
-import org.apache.hudi.hive.HoodieHiveClient;
+import org.apache.hudi.hive.HiveSyncTool;
+import org.apache.hudi.hive.client.HoodieHiveClient;
 import org.apache.hudi.hive.testutils.HiveTestService;
 import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.sources.TestDataSource;
@@ -53,6 +54,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hive.service.server.HiveServer2;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -62,6 +64,7 @@ import org.apache.parquet.hadoop.ParquetWriter;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.SparkSession;
+import org.apache.thrift.TException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -174,16 +177,16 @@ public class UtilitiesTestBase {
    * 
    * @throws IOException
    */
-  private static void clearHiveDb() throws IOException {
+  private static void clearHiveDb() throws IOException, TException, HiveException {
     HiveConf hiveConf = new HiveConf();
     // Create Dummy hive sync config
     HiveSyncConfig hiveSyncConfig = getHiveSyncConfig("/dummy", "dummy");
     hiveConf.addResource(hiveServer.getHiveConf());
     HoodieTableMetaClient.initTableType(dfs.getConf(), hiveSyncConfig.basePath, HoodieTableType.COPY_ON_WRITE,
         hiveSyncConfig.tableName, null);
-    HoodieHiveClient client = new HoodieHiveClient(hiveSyncConfig, hiveConf, dfs);
-    client.updateHiveSQL("drop database if exists " + hiveSyncConfig.databaseName);
-    client.updateHiveSQL("create database " + hiveSyncConfig.databaseName);
+    HoodieHiveClient client = HiveSyncTool.loadHoodieHiveClient(hiveSyncConfig, hiveConf, dfs);
+    client.dropHiveDatabase(hiveSyncConfig.databaseName);
+    client.createHiveDatabase(hiveSyncConfig.databaseName);
     client.close();
   }
 
