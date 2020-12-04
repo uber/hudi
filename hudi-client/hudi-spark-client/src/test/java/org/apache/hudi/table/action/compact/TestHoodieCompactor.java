@@ -18,6 +18,7 @@
 
 package org.apache.hudi.table.action.compact;
 
+import java.util.Collections;
 import org.apache.hudi.avro.model.HoodieCompactionPlan;
 import org.apache.hudi.client.SparkRDDWriteClient;
 import org.apache.hudi.client.WriteStatus;
@@ -25,6 +26,7 @@ import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.FileSlice;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.HoodieTableType;
+import org.apache.hudi.common.model.HoodieWriteStat;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieActiveTimeline;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
@@ -159,7 +161,10 @@ public class TestHoodieCompactor extends HoodieClientTestHarness {
           .withLogAppends(updatedRecords);
       metaClient.getActiveTimeline().transitionRequestedToInflight(new HoodieInstant(State.REQUESTED,
           HoodieTimeline.DELTA_COMMIT_ACTION, newCommitTime), Option.empty());
-      writeClient.commit(newCommitTime, jsc.emptyRDD(), Option.empty());
+      WriteStatus mockWriteStatus = new WriteStatus(false, 0.1);
+      mockWriteStatus.setStat(new HoodieWriteStat());
+      writeClient.commit(newCommitTime, jsc.parallelize(Collections.singletonList(mockWriteStatus)),
+          Option.empty());
       metaClient.reloadActiveTimeline();
 
       // Verify that all data file has one log file
