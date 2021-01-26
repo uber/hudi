@@ -218,4 +218,23 @@ public class HoodieFlinkWriteClient<T extends HoodieRecordPayload> extends
     return unCompletedTimeline.getInstants().filter(x -> x.getAction().equals(commitType)).map(HoodieInstant::getTimestamp)
         .collect(Collectors.toList());
   }
+
+  public Option<HoodieInstant.State> getInstantTimeState(String instantTime) {
+    HoodieTableMetaClient metaClient = createMetaClient(true);
+    Option<HoodieInstant> instantOption = metaClient.getActiveTimeline().filter(x -> instantTime.equals(x.getTimestamp())).lastInstant();
+    if (instantOption.isPresent()) {
+      return Option.of(instantOption.get().getState());
+    }
+    return Option.empty();
+  }
+
+  public Option<String> getLatestCompletedInstanTime() {
+    HoodieTableMetaClient metaClient = createMetaClient(true);
+    Option<HoodieInstant> instantOption = metaClient.getActiveTimeline().filter(HoodieInstant::isCompleted).lastInstant();
+    if (instantOption.isPresent()) {
+      return Option.of(instantOption.get().getTimestamp());
+    }
+    return Option.empty();
+  }
+
 }
