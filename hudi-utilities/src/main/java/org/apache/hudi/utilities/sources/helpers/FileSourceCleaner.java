@@ -18,6 +18,7 @@
 
 package org.apache.hudi.utilities.sources.helpers;
 
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hudi.common.config.TypedProperties;
@@ -104,14 +105,23 @@ public abstract class FileSourceCleaner {
    * Clean up a file that has been ingested successfully.
    */
   public void clean(String file) {
-    if (cleanerPool.isPresent()) {
-      cleanerPool.get().submit(() -> cleanTask(file));
-    } else {
-      cleanTask(file);
+    try {
+      final FileStatus fileStatus = fs.getFileStatus(new Path(file));
+      if (fileStatus.isDirectory()) {
+        LOG.info(String.format("%s is a directory. Not doing clean up", file));
+        return;
+      }
+      if (cleanerPool.isPresent()) {
+        cleanerPool.get().submit(() -> cleanTask(fileStatus));
+      } else {
+        cleanTask(fileStatus);
+      }
+    } catch (IOException e) {
+      LOG.error(String.format("Failed to clean up file %s", file), e);
     }
   }
 
-  abstract void cleanTask(String file);
+  abstract void cleanTask(FileStatus file);
 
   private static class FileSourceRemover extends FileSourceCleaner {
     public FileSourceRemover(TypedProperties props, FileSystem fs) {
@@ -119,10 +129,11 @@ public abstract class FileSourceCleaner {
     }
 
     @Override
-    void cleanTask(String file) {
+    void cleanTask(FileStatus file) {
+
       LOG.info(String.format("Removing %s...", file));
       try {
-        if (fs.delete(new Path(file), false)) {
+        if (fs.delete(file.getPath(), false)) {
           LOG.info(String.format("Successfully remove up %s", file));
         } else {
           LOG.warn(String.format("Failed to remove %s", file));
@@ -134,14 +145,14 @@ public abstract class FileSourceCleaner {
   }
 
   private static class FileSourceArchiver extends FileSourceCleaner {
-    private final Path archiveDir;
+    private final Path archiveRootDir;
     private final Path sourceRootDir;
 
     public FileSourceArchiver(TypedProperties props, FileSystem fs) {
       super(props, fs);
-      this.archiveDir = new Path(props.getString(Config.FILE_SOURCE_ARCHIVE_DIR_KEY));
+      this.archiveRootDir = new Path(props.getString(Config.FILE_SOURCE_ARCHIVE_DIR_KEY));
       this.sourceRootDir = new Path(props.getString(ROOT_INPUT_PATH_PROP));
-      ValidationUtils.checkArgument(!isSubDir(archiveDir, sourceRootDir),
+      ValidationUtils.checkArgument(!isSubDir(archiveRootDir, sourceRootDir),
           String.format("%s must not be child of %s", Config.FILE_SOURCE_ARCHIVE_DIR_KEY, ROOT_INPUT_PATH_PROP));
     }
 
@@ -156,20 +167,20 @@ public abstract class FileSourceCleaner {
     }
 
     @Override
-    void cleanTask(String file) {
+    void cleanTask(FileStatus file) {
       try {
-        final Path original = new Path(file);
-        final Path fileDir = original.getParent();
+        final Path srcFile = file.getPath();
+        final Path fileDir = srcFile.getParent();
         Path relativeDir = getRelativeDir(fileDir, sourceRootDir);
-        final Path newDir = new Path(archiveDir, relativeDir);
-        if (!fs.exists(newDir)) {
-          LOG.info("Creating archive directory: " + newDir.toString());
-          fs.mkdirs(newDir);
+        final Path archiveDir = new Path(archiveRootDir, relativeDir);
+        if (!fs.exists(archiveDir)) {
+          LOG.info("Creating archive directory: " + archiveDir.toString());
+          fs.mkdirs(archiveDir);
         }
 
-        final Path newFile = new Path(newDir, original.getName());
-        LOG.info(String.format("Renaming: %s to %s", original.toString(), newFile));
-        if (fs.rename(original, newFile)) {
+        final Path dstFile = new Path(archiveDir, srcFile.getName());
+        LOG.info(String.format("Renaming: %s to %s", srcFile.toString(), dstFile));
+        if (fs.rename(srcFile, dstFile)) {
           LOG.info(String.format("Successfully archive %s", file));
         } else {
           LOG.warn(String.format("Failed to archive %s", file));
@@ -201,7 +212,7 @@ public abstract class FileSourceCleaner {
     }
 
     @Override
-    void cleanTask(String file) {
+    void cleanTask(FileStatus file) {
       LOG.info("No hoodie.deltastreamer.source.dfs.clean was specified. Leaving source unchanged.");
     }
   }
