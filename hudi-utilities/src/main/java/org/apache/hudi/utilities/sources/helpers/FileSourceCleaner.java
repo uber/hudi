@@ -41,7 +41,6 @@ import static org.apache.hudi.utilities.sources.helpers.DFSPathSelector.Config.R
  */
 public abstract class FileSourceCleaner {
   private static final Logger LOG = LogManager.getLogger(FileSourceCleaner.class);
-  protected final FileSystem fs;
 
   /**
    * Configs supported.
@@ -74,6 +73,7 @@ public abstract class FileSourceCleaner {
     OFF
   }
 
+  protected final FileSystem fs;
   private final Option<ExecutorService> cleanerPool;
 
   protected FileSourceCleaner(TypedProperties props, FileSystem fs) {
@@ -105,23 +105,14 @@ public abstract class FileSourceCleaner {
    * Clean up a file that has been ingested successfully.
    */
   public void clean(String file) {
-    try {
-      final FileStatus fileStatus = fs.getFileStatus(new Path(file));
-      if (fileStatus.isDirectory()) {
-        LOG.info(String.format("%s is a directory. Not doing clean up", file));
-        return;
-      }
-      if (cleanerPool.isPresent()) {
-        cleanerPool.get().submit(() -> cleanTask(fileStatus));
-      } else {
-        cleanTask(fileStatus);
-      }
-    } catch (IOException e) {
-      LOG.error(String.format("Failed to clean up file %s", file), e);
+    if (cleanerPool.isPresent()) {
+      cleanerPool.get().submit(() -> cleanTask(file));
+    } else {
+      cleanTask(file);
     }
   }
 
-  abstract void cleanTask(FileStatus file);
+  abstract void cleanTask(String file);
 
   private static class FileSourceRemover extends FileSourceCleaner {
     public FileSourceRemover(TypedProperties props, FileSystem fs) {
@@ -129,11 +120,11 @@ public abstract class FileSourceCleaner {
     }
 
     @Override
-    void cleanTask(FileStatus file) {
+    void cleanTask(String file) {
 
       LOG.info(String.format("Removing %s...", file));
       try {
-        if (fs.delete(file.getPath(), false)) {
+        if (fs.delete(new Path(file), false)) {
           LOG.info(String.format("Successfully remove up %s", file));
         } else {
           LOG.warn(String.format("Failed to remove %s", file));
@@ -167,9 +158,14 @@ public abstract class FileSourceCleaner {
     }
 
     @Override
-    void cleanTask(FileStatus file) {
+    void cleanTask(String file) {
       try {
-        final Path srcFile = file.getPath();
+        final Path srcFile = new Path(file);
+        FileStatus status = fs.getFileStatus(srcFile);
+        if (status.isDirectory()) {
+          LOG.warn(String.format("%s is a directory. Skip archiving", file));
+          return;
+        }
         final Path fileDir = srcFile.getParent();
         Path relativeDir = getRelativeDir(fileDir, sourceRootDir);
         final Path archiveDir = new Path(archiveRootDir, relativeDir);
@@ -212,7 +208,7 @@ public abstract class FileSourceCleaner {
     }
 
     @Override
-    void cleanTask(FileStatus file) {
+    void cleanTask(String file) {
       LOG.info("No hoodie.deltastreamer.source.dfs.clean was specified. Leaving source unchanged.");
     }
   }
