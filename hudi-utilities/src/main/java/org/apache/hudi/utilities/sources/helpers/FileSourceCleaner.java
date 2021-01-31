@@ -54,16 +54,16 @@ public abstract class FileSourceCleaner {
 
   private enum CleanMode {
     /**
-     * Remove source files after each successfully commit
+     * Remove source files after each successfully commit.
      */
     DELETE,
     /**
-     * Move source files to specified archive directory after each successful commit
+     * Move source files to specified archive directory after each successful commit.
      * Used in conjunction with <code>hoodie.deltastreamer.source.dfs.clean.archiveDir</code>
      */
     ARCHIVE,
     /**
-     * Default option. Do not clean up source files
+     * Default option. Do not clean up source files.
      */
     OFF
   }
