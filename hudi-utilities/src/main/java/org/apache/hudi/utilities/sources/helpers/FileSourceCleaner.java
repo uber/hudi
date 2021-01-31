@@ -33,6 +33,11 @@ import java.util.concurrent.Executors;
 
 import static org.apache.hudi.utilities.sources.helpers.DFSPathSelector.Config.ROOT_INPUT_PATH_PROP;
 
+/**
+ * This class provide various clean-up strategies for DeltaStreamer when reading from DFS file sources.
+ * Each <code>*DFSSource</code> may invoke this to clean up/archive files after each successful commit.
+ *
+ */
 public abstract class FileSourceCleaner {
   private static final Logger LOG = LogManager.getLogger(FileSourceCleaner.class);
   protected final FileSystem fs;
