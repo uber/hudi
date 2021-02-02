@@ -57,13 +57,13 @@ public abstract class HoodieReadHandle<T extends HoodieRecordPayload, I, K, O> e
     return partitionPathFilePair.getRight();
   }
 
-  protected HoodieBaseFile getLatestDataFile() {
+  protected HoodieBaseFile getLatestBaseFile() {
     return hoodieTable.getBaseFileOnlyView()
         .getLatestBaseFile(partitionPathFilePair.getLeft(), partitionPathFilePair.getRight()).get();
   }
 
   protected HoodieFileReader createNewFileReader() throws IOException {
     return HoodieFileReaderFactory.getFileReader(hoodieTable.getHadoopConf(),
-        new Path(getLatestDataFile().getPath()));
+        new Path(getLatestBaseFile().getPath()));
   }
 }

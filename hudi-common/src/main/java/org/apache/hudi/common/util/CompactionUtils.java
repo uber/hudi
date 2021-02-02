@@ -110,7 +110,7 @@ public class CompactionUtils {
     return HoodieCompactionOperation.newBuilder().setFileId(op.getFileId()).setBaseInstantTime(op.getBaseInstantTime())
         .setPartitionPath(op.getPartitionPath())
         .setBootstrapFilePath(op.getBootstrapFilePath().orElse(null))
-        .setDataFilePath(op.getDataFileName().isPresent() ? op.getDataFileName().get() : null)
+        .setDataFilePath(op.getBaseFileName().isPresent() ? op.getBaseFileName().get() : null)
         .setDeltaFilePaths(op.getDeltaFileNames()).setMetrics(op.getMetrics()).build();
   }
 

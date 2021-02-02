@@ -253,17 +253,17 @@ public class TestHoodieCompactionStrategy {
     List<HoodieCompactionOperation> operations = new ArrayList<>(sizesMap.size());
 
     sizesMap.forEach((k, v) -> {
-      HoodieBaseFile df = TestHoodieBaseFile.newDataFile(k);
+      HoodieBaseFile bf = TestHoodieBaseFile.newBaseFile(k);
       String partitionPath = keyToPartitionMap.get(k);
       List<HoodieLogFile> logFiles = v.stream().map(TestHoodieLogFile::newLogFile).collect(Collectors.toList());
-      FileSlice slice = new FileSlice(new HoodieFileGroupId(partitionPath, df.getFileId()), df.getCommitTime());
-      slice.setBaseFile(df);
+      FileSlice slice = new FileSlice(new HoodieFileGroupId(partitionPath, bf.getFileId()), bf.getCommitTime());
+      slice.setBaseFile(bf);
       logFiles.stream().forEach(f -> slice.addLogFile(f));
-      operations.add(new HoodieCompactionOperation(df.getCommitTime(),
-          logFiles.stream().map(s -> s.getPath().toString()).collect(Collectors.toList()), df.getPath(), df.getFileId(),
+      operations.add(new HoodieCompactionOperation(bf.getCommitTime(),
+          logFiles.stream().map(s -> s.getPath().toString()).collect(Collectors.toList()), bf.getPath(), bf.getFileId(),
           partitionPath,
           config.getCompactionStrategy().captureMetrics(config, slice),
-          df.getBootstrapBaseFile().map(BaseFile::getPath).orElse(null))
+              bf.getBootstrapBaseFile().map(BaseFile::getPath).orElse(null))
       );
     });
     return operations;
@@ -278,7 +278,7 @@ public class TestHoodieCompactionStrategy {
       this.size = size;
     }
 
-    public static HoodieBaseFile newDataFile(long size) {
+    public static HoodieBaseFile newBaseFile(long size) {
       return new TestHoodieBaseFile(size);
     }
 

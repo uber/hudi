@@ -116,11 +116,11 @@ public class HoodieMergeHandle<T extends HoodieRecordPayload, I, K, O> extends H
    */
   public HoodieMergeHandle(HoodieWriteConfig config, String instantTime, HoodieTable<T, I, K, O> hoodieTable,
                            Map<String, HoodieRecord<T>> keyToNewRecords, String partitionPath, String fileId,
-                           HoodieBaseFile dataFileToBeMerged, TaskContextSupplier taskContextSupplier) {
+                           HoodieBaseFile baseFileToBeMerged, TaskContextSupplier taskContextSupplier) {
     super(config, instantTime, partitionPath, fileId, hoodieTable, taskContextSupplier);
     this.keyToNewRecords = keyToNewRecords;
     this.useWriterSchema = true;
-    init(fileId, this.partitionPath, dataFileToBeMerged);
+    init(fileId, this.partitionPath, baseFileToBeMerged);
   }
 
   @Override
@@ -149,7 +149,7 @@ public class HoodieMergeHandle<T extends HoodieRecordPayload, I, K, O> extends H
       partitionMetadata.trySave(getPartitionId());
 
       oldFilePath = new Path(config.getBasePath() + "/" + partitionPath + "/" + latestValidFilePath);
-      String newFileName = FSUtils.makeDataFileName(instantTime, writeToken, fileId, hoodieTable.getBaseFileExtension());
+      String newFileName = FSUtils.makeBaseFileName(instantTime, writeToken, fileId, hoodieTable.getBaseFileExtension());
       String relativePath = new Path((partitionPath.isEmpty() ? "" : partitionPath + "/")
           + newFileName).toString();
       newFilePath = new Path(config.getBasePath(), relativePath);

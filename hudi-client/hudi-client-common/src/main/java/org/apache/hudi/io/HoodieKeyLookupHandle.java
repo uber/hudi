@@ -116,14 +116,14 @@ public class HoodieKeyLookupHandle<T extends HoodieRecordPayload, I, K, O> exten
       LOG.debug("#The candidate row keys for " + partitionPathFilePair + " => " + candidateRecordKeys);
     }
 
-    HoodieBaseFile dataFile = getLatestDataFile();
+    HoodieBaseFile baseFile = getLatestBaseFile();
     List<String> matchingKeys =
-        checkCandidatesAgainstFile(hoodieTable.getHadoopConf(), candidateRecordKeys, new Path(dataFile.getPath()));
+        checkCandidatesAgainstFile(hoodieTable.getHadoopConf(), candidateRecordKeys, new Path(baseFile.getPath()));
     LOG.info(
         String.format("Total records (%d), bloom filter candidates (%d)/fp(%d), actual matches (%d)", totalKeysChecked,
             candidateRecordKeys.size(), candidateRecordKeys.size() - matchingKeys.size(), matchingKeys.size()));
     return new KeyLookupResult(partitionPathFilePair.getRight(), partitionPathFilePair.getLeft(),
-        dataFile.getCommitTime(), matchingKeys);
+      baseFile.getCommitTime(), matchingKeys);
   }
 
   /**

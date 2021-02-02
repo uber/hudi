@@ -157,19 +157,19 @@ public class CompactionTestUtils {
   }
 
   public static HoodieCompactionPlan createCompactionPlan(HoodieTableMetaClient metaClient, String instantTime,
-      String compactionInstantTime, int numFileIds, boolean createDataFile, boolean deltaCommitsAfterCompactionRequests) {
+      String compactionInstantTime, int numFileIds, boolean createBaseFile, boolean deltaCommitsAfterCompactionRequests) {
     List<HoodieCompactionOperation> ops = IntStream.range(0, numFileIds).boxed().map(idx -> {
       try {
         final String basePath = metaClient.getBasePath();
         final String partition = DEFAULT_PARTITION_PATHS[0];
         final String fileId = UUID.randomUUID().toString();
-        if (createDataFile) {
+        if (createBaseFile) {
           createBaseFile(basePath, partition, instantTime, fileId);
         }
         createLogFile(basePath, partition, instantTime, fileId, 1);
         createLogFile(basePath, partition, instantTime, fileId, 2);
         FileSlice slice = new FileSlice(partition, instantTime, fileId);
-        if (createDataFile) {
+        if (createBaseFile) {
           slice.setBaseFile(new DummyHoodieBaseFile(Paths.get(basePath, partition,
               baseFileName(instantTime, fileId)).toString()));
         }
@@ -193,7 +193,7 @@ public class CompactionTestUtils {
   }
 
   /**
-   * The hoodie data file for testing.
+   * The hoodie base file for testing.
    */
   public static class DummyHoodieBaseFile extends HoodieBaseFile {
 

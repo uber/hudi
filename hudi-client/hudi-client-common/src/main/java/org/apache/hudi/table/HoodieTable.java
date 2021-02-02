@@ -467,7 +467,7 @@ public abstract class HoodieTable<T extends HoodieRecordPayload, I, K, O> implem
   }
 
   /**
-   * Reconciles WriteStats and marker files to detect and safely delete duplicate data files created because of Spark
+   * Reconciles WriteStats and marker files to detect and safely delete duplicate base files created because of Spark
    * retries.
    *
    * @param context HoodieEngineContext
@@ -481,7 +481,7 @@ public abstract class HoodieTable<T extends HoodieRecordPayload, I, K, O> implem
                                          List<HoodieWriteStat> stats,
                                          boolean consistencyCheckEnabled) throws HoodieIOException {
     try {
-      // Reconcile marker and data files with WriteStats so that partially written data-files due to failed
+      // Reconcile marker and base files with WriteStats so that partially written base-files due to failed
       // (but succeeded on retry) tasks are removed.
       String basePath = getMetaClient().getBasePath();
       MarkerFiles markers = new MarkerFiles(this, instantTs);
@@ -492,18 +492,18 @@ public abstract class HoodieTable<T extends HoodieRecordPayload, I, K, O> implem
       }
 
       // we are not including log appends here, since they are already fail-safe.
-      Set<String> invalidDataPaths = markers.createdAndMergedDataPaths(context, config.getFinalizeWriteParallelism());
-      Set<String> validDataPaths = stats.stream()
+      Set<String> invalidBasePaths = markers.createdAndMergedDataPaths(context, config.getFinalizeWriteParallelism());
+      Set<String> validBasePaths = stats.stream()
           .map(HoodieWriteStat::getPath)
           .filter(p -> p.endsWith(this.getBaseFileExtension()))
           .collect(Collectors.toSet());
 
       // Contains list of partially created files. These needs to be cleaned up.
-      invalidDataPaths.removeAll(validDataPaths);
+      invalidBasePaths.removeAll(validBasePaths);
 
-      if (!invalidDataPaths.isEmpty()) {
-        LOG.info("Removing duplicate data files created due to spark retries before committing. Paths=" + invalidDataPaths);
-        Map<String, List<Pair<String, String>>> invalidPathsByPartition = invalidDataPaths.stream()
+      if (!invalidBasePaths.isEmpty()) {
+        LOG.info("Removing duplicate data files created due to spark retries before committing. Paths=" + invalidBasePaths);
+        Map<String, List<Pair<String, String>>> invalidPathsByPartition = invalidBasePaths.stream()
             .map(dp -> Pair.of(new Path(basePath, dp).getParent().toString(), new Path(basePath, dp).toString()))
             .collect(Collectors.groupingBy(Pair::getKey));
 

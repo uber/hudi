@@ -29,8 +29,8 @@ public class ListingBasedRollbackRequest {
    * Rollback commands, that trigger a specific handling for rollback.
    */
   public enum Type {
-    DELETE_DATA_FILES_ONLY,
-    DELETE_DATA_AND_LOG_FILES,
+    DELETE_BASE_FILES_ONLY,
+    DELETE_BASE_AND_LOG_FILES,
     APPEND_ROLLBACK_BLOCK
   }
 
@@ -61,14 +61,14 @@ public class ListingBasedRollbackRequest {
     this.type = type;
   }
 
-  public static ListingBasedRollbackRequest createRollbackRequestWithDeleteDataFilesOnlyAction(String partitionPath) {
+  public static ListingBasedRollbackRequest createRollbackRequestWithDeleteBaseFilesOnlyAction(String partitionPath) {
     return new ListingBasedRollbackRequest(partitionPath, Option.empty(), Option.empty(),
-        Type.DELETE_DATA_FILES_ONLY);
+        Type.DELETE_BASE_FILES_ONLY);
   }
 
-  public static ListingBasedRollbackRequest createRollbackRequestWithDeleteDataAndLogFilesAction(String partitionPath) {
+  public static ListingBasedRollbackRequest createRollbackRequestWithDeleteBaseAndLogFilesAction(String partitionPath) {
     return new ListingBasedRollbackRequest(partitionPath, Option.empty(), Option.empty(),
-        Type.DELETE_DATA_AND_LOG_FILES);
+        Type.DELETE_BASE_AND_LOG_FILES);
   }
 
   public static ListingBasedRollbackRequest createRollbackRequestWithAppendRollbackBlockAction(String partitionPath, String fileId,

@@ -132,12 +132,11 @@ public class FSUtils {
     return String.format("%d-%d-%d", taskPartitionId, stageId, taskAttemptId);
   }
 
-  // TODO: this should be removed
-  public static String makeDataFileName(String instantTime, String writeToken, String fileId) {
-    return String.format("%s_%s_%s%s", fileId, writeToken, instantTime, HoodieFileFormat.PARQUET.getFileExtension());
+  public static String makeBaseFileName(String instantTime, String writeToken, String fileId) {
+    return String.format("%s_%s_%s.parquet", fileId, writeToken, instantTime);
   }
 
-  public static String makeDataFileName(String instantTime, String writeToken, String fileId, String fileExtension) {
+  public static String makeBaseFileName(String instantTime, String writeToken, String fileId, String fileExtension) {
     return String.format("%s_%s_%s%s", fileId, writeToken, instantTime, fileExtension);
   }
 

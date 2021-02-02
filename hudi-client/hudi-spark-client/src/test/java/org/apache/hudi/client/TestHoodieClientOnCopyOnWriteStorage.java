@@ -1637,7 +1637,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
 
     Path markerFilePath = new MarkerFiles(fs, basePath, metaClient.getMarkerFolderPath(instantTime), instantTime)
         .create(partitionPath,
-            FSUtils.makeDataFileName(instantTime, "1-0-1", UUID.randomUUID().toString()),
+            FSUtils.makeBaseFileName(instantTime, "1-0-1", UUID.randomUUID().toString()),
             IOType.MERGE);
     LOG.info("Created a dummy marker path=" + markerFilePath);
 

@@ -102,14 +102,14 @@ public class ListingBasedRollbackHelper implements Serializable {
                                                              boolean doDelete) {
     return context.mapToPair(rollbackRequests, rollbackRequest -> {
       switch (rollbackRequest.getType()) {
-        case DELETE_DATA_FILES_ONLY: {
+        case DELETE_BASE_FILES_ONLY: {
           final Map<FileStatus, Boolean> filesToDeletedStatus = deleteBaseFiles(metaClient, config, instantToRollback.getTimestamp(),
               rollbackRequest.getPartitionPath(), doDelete);
           return new ImmutablePair<>(rollbackRequest.getPartitionPath(),
               HoodieRollbackStat.newBuilder().withPartitionPath(rollbackRequest.getPartitionPath())
                   .withDeletedFileResults(filesToDeletedStatus).build());
         }
-        case DELETE_DATA_AND_LOG_FILES: {
+        case DELETE_BASE_AND_LOG_FILES: {
           final Map<FileStatus, Boolean> filesToDeletedStatus = deleteBaseAndLogFiles(metaClient, config, instantToRollback.getTimestamp(), rollbackRequest.getPartitionPath(), doDelete);
           return new ImmutablePair<>(rollbackRequest.getPartitionPath(),
               HoodieRollbackStat.newBuilder().withPartitionPath(rollbackRequest.getPartitionPath())

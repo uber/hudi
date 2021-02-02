@@ -97,7 +97,7 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
   /**
    * Get the list of data file names savepointed.
    */
-  public Stream<String> getSavepointedDataFiles(String savepointTime) {
+  public Stream<String> getSavepointedBaseFiles(String savepointTime) {
     if (!hoodieTable.getSavepoints().contains(savepointTime)) {
       throw new HoodieSavepointException(
           "Could not get data files for savepoint " + savepointTime + ". No such savepoint.");
@@ -208,9 +208,9 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
     LOG.info("Cleaning " + partitionPath + ", retaining latest " + config.getCleanerFileVersionsRetained()
         + " file versions. ");
     List<CleanFileInfo> deletePaths = new ArrayList<>();
-    // Collect all the datafiles savepointed by all the savepoints
+    // Collect all the basefiles savepointed by all the savepoints
     List<String> savepointedFiles = hoodieTable.getSavepoints().stream()
-        .flatMap(this::getSavepointedDataFiles)
+        .flatMap(this::getSavepointedBaseFiles)
         .collect(Collectors.toList());
 
     // In this scenario, we will assume that once replaced a file group automatically becomes eligible for cleaning completely
@@ -231,8 +231,8 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
       while (fileSliceIterator.hasNext() && keepVersions > 0) {
         // Skip this most recent version
         FileSlice nextSlice = fileSliceIterator.next();
-        Option<HoodieBaseFile> dataFile = nextSlice.getBaseFile();
-        if (dataFile.isPresent() && savepointedFiles.contains(dataFile.get().getFileName())) {
+        Option<HoodieBaseFile> baseFile = nextSlice.getBaseFile();
+        if (baseFile.isPresent() && savepointedFiles.contains(baseFile.get().getFileName())) {
           // do not clean up a savepoint data file
           continue;
         }
@@ -266,9 +266,9 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
     LOG.info("Cleaning " + partitionPath + ", retaining latest " + commitsRetained + " commits. ");
     List<CleanFileInfo> deletePaths = new ArrayList<>();
 
-    // Collect all the datafiles savepointed by all the savepoints
+    // Collect all the basefiles savepointed by all the savepoints
     List<String> savepointedFiles = hoodieTable.getSavepoints().stream()
-        .flatMap(this::getSavepointedDataFiles)
+        .flatMap(this::getSavepointedBaseFiles)
         .collect(Collectors.toList());
 
     // determine if we have enough commits, to start cleaning.
@@ -313,10 +313,10 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
           if (!isFileSliceNeededForPendingCompaction(aSlice) && HoodieTimeline
               .compareTimestamps(earliestCommitToRetain.getTimestamp(), HoodieTimeline.GREATER_THAN, fileCommitTime)) {
             // this is a commit, that should be cleaned.
-            aFile.ifPresent(hoodieDataFile -> {
-              deletePaths.add(new CleanFileInfo(hoodieDataFile.getPath(), false));
-              if (hoodieDataFile.getBootstrapBaseFile().isPresent() && config.shouldCleanBootstrapBaseFile()) {
-                deletePaths.add(new CleanFileInfo(hoodieDataFile.getBootstrapBaseFile().get().getPath(), true));
+            aFile.ifPresent(hoodieBaseFile -> {
+              deletePaths.add(new CleanFileInfo(hoodieBaseFile.getPath(), false));
+              if (hoodieBaseFile.getBootstrapBaseFile().isPresent() && config.shouldCleanBootstrapBaseFile()) {
+                deletePaths.add(new CleanFileInfo(hoodieBaseFile.getBootstrapBaseFile().get().getPath(), true));
               }
             });
             if (hoodieTable.getMetaClient().getTableType() == HoodieTableType.MERGE_ON_READ) {

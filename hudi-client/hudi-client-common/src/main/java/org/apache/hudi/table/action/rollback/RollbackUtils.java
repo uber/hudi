@@ -19,7 +19,6 @@
 package org.apache.hudi.table.action.rollback;
 
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
@@ -88,7 +87,7 @@ public class RollbackUtils {
 
   /**
    * Generate all rollback requests that needs rolling back this action without actually performing rollback for COW table type.
-   * @param fs instance of {@link FileSystem} to use.
+   * @param engineContext HoodieEngineContext.
    * @param basePath base path of interest.
    * @param config instance of {@link HoodieWriteConfig} to use.
    * @return {@link List} of {@link ListingBasedRollbackRequest}s thus collected.
@@ -96,7 +95,7 @@ public class RollbackUtils {
   public static List<ListingBasedRollbackRequest> generateRollbackRequestsByListingCOW(HoodieEngineContext engineContext,
                                                                                        String basePath, HoodieWriteConfig config) {
     return FSUtils.getAllPartitionPaths(engineContext, config.getMetadataConfig(), basePath).stream()
-        .map(ListingBasedRollbackRequest::createRollbackRequestWithDeleteDataAndLogFilesAction)
+        .map(ListingBasedRollbackRequest::createRollbackRequestWithDeleteBaseAndLogFilesAction)
         .collect(Collectors.toList());
   }
 
@@ -122,7 +121,7 @@ public class RollbackUtils {
         case HoodieTimeline.REPLACE_COMMIT_ACTION:
           LOG.info("Rolling back commit action.");
           partitionRollbackRequests.add(
-              ListingBasedRollbackRequest.createRollbackRequestWithDeleteDataAndLogFilesAction(partitionPath));
+              ListingBasedRollbackRequest.createRollbackRequestWithDeleteBaseAndLogFilesAction(partitionPath));
           break;
         case HoodieTimeline.COMPACTION_ACTION:
           // If there is no delta commit present after the current commit (if compaction), no action, else we
@@ -137,7 +136,7 @@ public class RollbackUtils {
             // have been written to the log files.
             LOG.info("Rolling back compaction. There are higher delta commits. So only deleting data files");
             partitionRollbackRequests.add(
-                ListingBasedRollbackRequest.createRollbackRequestWithDeleteDataFilesOnlyAction(partitionPath));
+                ListingBasedRollbackRequest.createRollbackRequestWithDeleteBaseFilesOnlyAction(partitionPath));
           } else {
             // No deltacommits present after this compaction commit (inflight or requested). In this case, we
             // can also delete any log files that were created with this compaction commit as base
@@ -145,7 +144,7 @@ public class RollbackUtils {
             LOG.info("Rolling back compaction plan. There are NO higher delta commits. So deleting both data and"
                 + " log files");
             partitionRollbackRequests.add(
-                ListingBasedRollbackRequest.createRollbackRequestWithDeleteDataAndLogFilesAction(partitionPath));
+                ListingBasedRollbackRequest.createRollbackRequestWithDeleteBaseAndLogFilesAction(partitionPath));
           }
           break;
         case HoodieTimeline.DELTA_COMMIT_ACTION:
@@ -183,7 +182,7 @@ public class RollbackUtils {
             // We do not know fileIds for inserts (first inserts are either log files or parquet files),
             // delete all files for the corresponding failed commit, if present (same as COW)
             partitionRollbackRequests.add(
-                ListingBasedRollbackRequest.createRollbackRequestWithDeleteDataAndLogFilesAction(partitionPath));
+                ListingBasedRollbackRequest.createRollbackRequestWithDeleteBaseAndLogFilesAction(partitionPath));
 
             // append rollback blocks for updates
             if (commitMetadata.getPartitionToWriteStats().containsKey(partitionPath)) {

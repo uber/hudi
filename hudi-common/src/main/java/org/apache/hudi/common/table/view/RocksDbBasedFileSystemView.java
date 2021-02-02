@@ -228,15 +228,15 @@ public class RocksDbBasedFileSystemView extends IncrementalTimelineSyncFileSyste
     rocksDB.prefixDelete(schemaHelper.getColFamilyForView(),
         schemaHelper.getPrefixForSliceViewByPartition(partitionPath));
     rocksDB.prefixDelete(schemaHelper.getColFamilyForView(),
-        schemaHelper.getPrefixForDataFileViewByPartition(partitionPath));
+        schemaHelper.getPrefixForBaseFileViewByPartition(partitionPath));
 
     // Now add them
     fileGroups.forEach(fg ->
         rocksDB.writeBatch(batch ->
             fg.getAllFileSlicesIncludingInflight().forEach(fs -> {
               rocksDB.putInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForSliceView(fg, fs), fs);
-              fs.getBaseFile().ifPresent(df ->
-                  rocksDB.putInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForDataFileView(fg, fs), df)
+              fs.getBaseFile().ifPresent(bf ->
+                  rocksDB.putInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForBaseFileView(fg, fs), bf)
               );
             })
         )
@@ -264,7 +264,7 @@ public class RocksDbBasedFileSystemView extends IncrementalTimelineSyncFileSyste
                 // First remove the file-slice
                 LOG.info("Removing old Slice in DB. FS=" + oldSlice);
                 rocksDB.deleteInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForSliceView(fg, oldSlice));
-                rocksDB.deleteInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForDataFileView(fg, oldSlice));
+                rocksDB.deleteInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForBaseFileView(fg, oldSlice));
 
                 Map<String, HoodieLogFile> logFiles = oldSlice.getLogFiles()
                     .map(lf -> Pair.of(Path.getPathWithoutSchemeAndAuthority(lf.getPath()).toString(), lf))
@@ -308,8 +308,8 @@ public class RocksDbBasedFileSystemView extends IncrementalTimelineSyncFileSyste
               }
             }).filter(Objects::nonNull).forEach(fs -> {
               rocksDB.putInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForSliceView(fg, fs), fs);
-              fs.getBaseFile().ifPresent(df ->
-                  rocksDB.putInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForDataFileView(fg, fs), df)
+              fs.getBaseFile().ifPresent(bf ->
+                  rocksDB.putInBatch(batch, schemaHelper.getColFamilyForView(), schemaHelper.getKeyForBaseFileView(fg, fs), bf)
               );
             })
         )
@@ -325,7 +325,7 @@ public class RocksDbBasedFileSystemView extends IncrementalTimelineSyncFileSyste
   @Override
   Stream<HoodieBaseFile> fetchAllBaseFiles(String partitionPath) {
     return rocksDB.<HoodieBaseFile>prefixSearch(schemaHelper.getColFamilyForView(),
-        schemaHelper.getPrefixForDataFileViewByPartition(partitionPath)).map(Pair::getValue);
+        schemaHelper.getPrefixForBaseFileViewByPartition(partitionPath)).map(Pair::getValue);
   }
 
   @Override
@@ -416,7 +416,7 @@ public class RocksDbBasedFileSystemView extends IncrementalTimelineSyncFileSyste
     return Option
         .ofNullable(rocksDB
             .<HoodieBaseFile>prefixSearch(schemaHelper.getColFamilyForView(),
-                schemaHelper.getPrefixForDataFileViewByPartitionFile(partitionPath, fileId))
+                schemaHelper.getPrefixForBaseFileViewByPartitionFile(partitionPath, fileId))
             .map(Pair::getValue).reduce(null,
                 (x, y) -> ((x == null) ? y
                     : (y == null) ? null

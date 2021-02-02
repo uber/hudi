@@ -215,8 +215,8 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
       FileStatus[] allFiles = listAllBaseFilesInPath(hoodieTable);
       tableView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
       HoodieTableFileSystemView roView = new HoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-      Stream<HoodieBaseFile> dataFilesToRead = tableView.getLatestBaseFiles();
-      assertTrue(dataFilesToRead.findAny().isPresent());
+      Stream<HoodieBaseFile> baseFilesToRead = tableView.getLatestBaseFiles();
+      assertTrue(baseFilesToRead.findAny().isPresent());
 
       // verify that there is a commit
       metaClient = HoodieTableMetaClient.reload(metaClient);
@@ -459,12 +459,12 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
 
       FileStatus[] allFiles = listAllBaseFilesInPath(hoodieTable);
       tableView = getHoodieTableFileSystemView(metaClient, metaClient.getCommitTimeline().filterCompletedInstants(), allFiles);
-      Stream<HoodieBaseFile> dataFilesToRead = tableView.getLatestBaseFiles();
-      assertFalse(dataFilesToRead.findAny().isPresent());
+      Stream<HoodieBaseFile> baseFilesToRead = tableView.getLatestBaseFiles();
+      assertFalse(baseFilesToRead.findAny().isPresent());
 
       tableView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-      dataFilesToRead = tableView.getLatestBaseFiles();
-      assertTrue(dataFilesToRead.findAny().isPresent(),
+      baseFilesToRead = tableView.getLatestBaseFiles();
+      assertTrue(baseFilesToRead.findAny().isPresent(),
           "should list the parquet files we wrote in the delta commit");
 
       /**
@@ -500,11 +500,11 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
 
       allFiles = listAllBaseFilesInPath(hoodieTable);
       tableView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-      dataFilesToRead = tableView.getLatestBaseFiles();
-      assertTrue(dataFilesToRead.findAny().isPresent());
+      baseFilesToRead = tableView.getLatestBaseFiles();
+      assertTrue(baseFilesToRead.findAny().isPresent());
 
-      List<String> dataFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
-      List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, dataFiles, basePath);
+      List<String> baseFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
+      List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, baseFiles, basePath);
       // Wrote 20 records and deleted 20 records, so remaining 20-20 = 0
       assertEquals(0, recordsRead.size(), "Must contain 0 records");
     }
@@ -607,12 +607,12 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
       FileStatus[] allFiles = listAllBaseFilesInPath(hoodieTable);
       tableView =
           getHoodieTableFileSystemView(metaClient, metaClient.getCommitTimeline().filterCompletedInstants(), allFiles);
-      Stream<HoodieBaseFile> dataFilesToRead = tableView.getLatestBaseFiles();
-      assertTrue(!dataFilesToRead.findAny().isPresent());
+      Stream<HoodieBaseFile> baseFilesToRead = tableView.getLatestBaseFiles();
+      assertTrue(!baseFilesToRead.findAny().isPresent());
 
       tableView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-      dataFilesToRead = tableView.getLatestBaseFiles();
-      assertTrue(dataFilesToRead.findAny().isPresent(),
+      baseFilesToRead = tableView.getLatestBaseFiles();
+      assertTrue(baseFilesToRead.findAny().isPresent(),
           "should list the parquet files we wrote in the delta commit");
 
       /**
@@ -627,8 +627,8 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
         copyOfRecords = dataGen.generateUpdates(commitTime1, copyOfRecords);
         copyOfRecords.addAll(dataGen.generateInserts(commitTime1, 200));
 
-        List<String> dataFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
-        List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, dataFiles,
+        List<String> baseFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
+        List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, baseFiles,
             basePath);
         assertEquals(recordsRead.size(), 200);
 
@@ -644,8 +644,8 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
             .contains(commitTime1)).map(fileStatus -> fileStatus.getPath().toString()).collect(Collectors.toList());
         assertEquals(0, remainingFiles.size(), "There files should have been rolled-back "
             + "when rolling back commit " + commitTime1 + " but are still remaining. Files: " + remainingFiles);
-        dataFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
-        recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, dataFiles, basePath);
+        baseFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
+        recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, baseFiles, basePath);
         assertEquals(200, recordsRead.size());
       }
 
@@ -660,8 +660,8 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
         copyOfRecords = dataGen.generateUpdates(commitTime2, copyOfRecords);
         copyOfRecords.addAll(dataGen.generateInserts(commitTime2, 200));
 
-        List<String> dataFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
-        List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, dataFiles,
+        List<String> baseFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
+        List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, baseFiles,
             basePath);
         assertEquals(200, recordsRead.size());
 
@@ -681,8 +681,8 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
         metaClient = HoodieTableMetaClient.reload(metaClient);
         hoodieTable = HoodieSparkTable.create(cfg, context, metaClient);
         tableView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-        dataFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
-        recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, dataFiles, basePath);
+        baseFiles = tableView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
+        recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, baseFiles, basePath);
         // check that the number of records read is still correct after rollback operation
         assertEquals(200, recordsRead.size());
 
@@ -762,12 +762,12 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
 
       FileStatus[] allFiles = listAllBaseFilesInPath(hoodieTable);
       tableView = getHoodieTableFileSystemView(metaClient, metaClient.getCommitTimeline().filterCompletedInstants(), allFiles);
-      Stream<HoodieBaseFile> dataFilesToRead = tableView.getLatestBaseFiles();
-      assertFalse(dataFilesToRead.findAny().isPresent());
+      Stream<HoodieBaseFile> baseFilesToRead = tableView.getLatestBaseFiles();
+      assertFalse(baseFilesToRead.findAny().isPresent());
 
       tableView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-      dataFilesToRead = tableView.getLatestBaseFiles();
-      assertTrue(dataFilesToRead.findAny().isPresent(),
+      baseFilesToRead = tableView.getLatestBaseFiles();
+      assertTrue(baseFilesToRead.findAny().isPresent(),
           "Should list the parquet files we wrote in the delta commit");
 
       /**
@@ -782,8 +782,8 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
       copyOfRecords = dataGen.generateUpdates(newCommitTime, copyOfRecords);
       copyOfRecords.addAll(dataGen.generateInserts(newCommitTime, 200));
 
-      List<String> dataFiles = tableView.getLatestBaseFiles().map(hf -> hf.getPath()).collect(Collectors.toList());
-      List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, dataFiles,
+      List<String> baseFiles = tableView.getLatestBaseFiles().map(hf -> hf.getPath()).collect(Collectors.toList());
+      List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, baseFiles,
           basePath);
       assertEquals(200, recordsRead.size());
 
@@ -869,8 +869,8 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
       metaClient = HoodieTableMetaClient.reload(metaClient);
       allFiles = listAllBaseFilesInPath(hoodieTable);
       tableView = getHoodieTableFileSystemView(metaClient, metaClient.getCommitTimeline().filterCompletedInstants(), allFiles);
-      dataFilesToRead = tableView.getLatestBaseFiles();
-      assertFalse(dataFilesToRead.findAny().isPresent());
+      baseFilesToRead = tableView.getLatestBaseFiles();
+      assertFalse(baseFilesToRead.findAny().isPresent());
       SliceView rtView = getHoodieTableFileSystemView(metaClient, metaClient.getCommitTimeline().filterCompletedInstants(), allFiles);
       List<HoodieFileGroup> fileGroups =
           ((HoodieTableFileSystemView) rtView).getAllFileGroups().collect(Collectors.toList());
@@ -925,13 +925,13 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
       FileStatus[] allFiles = listAllBaseFilesInPath(hoodieTable);
       BaseFileOnlyView roView = getHoodieTableFileSystemView(metaClient,
           metaClient.getCommitsTimeline().filterCompletedInstants(), allFiles);
-      Stream<HoodieBaseFile> dataFilesToRead = roView.getLatestBaseFiles();
+      Stream<HoodieBaseFile> baseFilesToRead = roView.getLatestBaseFiles();
       Map<String, Long> parquetFileIdToSize =
-          dataFilesToRead.collect(Collectors.toMap(HoodieBaseFile::getFileId, HoodieBaseFile::getFileSize));
+          baseFilesToRead.collect(Collectors.toMap(HoodieBaseFile::getFileId, HoodieBaseFile::getFileSize));
 
       roView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-      dataFilesToRead = roView.getLatestBaseFiles();
-      List<HoodieBaseFile> dataFilesList = dataFilesToRead.collect(Collectors.toList());
+      baseFilesToRead = roView.getLatestBaseFiles();
+      List<HoodieBaseFile> dataFilesList = baseFilesToRead.collect(Collectors.toList());
       assertTrue(dataFilesList.size() > 0,
           "Should list the parquet files we wrote in the delta commit");
 
@@ -959,15 +959,15 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
       allFiles = listAllBaseFilesInPath(hoodieTable);
       roView = getHoodieTableFileSystemView(metaClient,
           hoodieTable.getActiveTimeline().reload().getCommitsTimeline().filterCompletedInstants(), allFiles);
-      dataFilesToRead = roView.getLatestBaseFiles();
-      List<HoodieBaseFile> newDataFilesList = dataFilesToRead.collect(Collectors.toList());
+      baseFilesToRead = roView.getLatestBaseFiles();
+      List<HoodieBaseFile> newBaseFilesList = baseFilesToRead.collect(Collectors.toList());
       Map<String, Long> parquetFileIdToNewSize =
-          newDataFilesList.stream().collect(Collectors.toMap(HoodieBaseFile::getFileId, HoodieBaseFile::getFileSize));
+          newBaseFilesList.stream().collect(Collectors.toMap(HoodieBaseFile::getFileId, HoodieBaseFile::getFileSize));
 
       assertTrue(parquetFileIdToNewSize.entrySet().stream().anyMatch(entry -> parquetFileIdToSize.get(entry.getKey()) < entry.getValue()));
 
-      List<String> dataFiles = roView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
-      List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, dataFiles,
+      List<String> baseFiles = roView.getLatestBaseFiles().map(HoodieBaseFile::getPath).collect(Collectors.toList());
+      List<GenericRecord> recordsRead = HoodieMergeOnReadTestUtils.getRecordsUsingInputFormat(hadoopConf, baseFiles,
           basePath);
       // Wrote 20 records in 2 batches
       assertEquals(40, recordsRead.size(), "Must contain 40 records");
@@ -1011,7 +1011,7 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
         List<FileSlice> groupedLogFiles =
             table.getSliceView().getLatestFileSlices(partitionPath).collect(Collectors.toList());
         for (FileSlice fileSlice : groupedLogFiles) {
-          assertEquals(1, fileSlice.getLogFiles().count(), "There should be 1 log file written for every data file");
+          assertEquals(1, fileSlice.getLogFiles().count(), "There should be 1 log file written for every base file");
         }
       }
 
@@ -1025,7 +1025,7 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
       String compactionInstantTime = writeClient.scheduleCompaction(Option.empty()).get().toString();
       JavaRDD<WriteStatus> result = (JavaRDD<WriteStatus>) writeClient.compact(compactionInstantTime);
 
-      // Verify that recently written compacted data file has no log file
+      // Verify that recently written compacted base file has no log file
       metaClient = HoodieTableMetaClient.reload(metaClient);
       table = HoodieSparkTable.create(config, context, metaClient);
       HoodieActiveTimeline timeline = metaClient.getActiveTimeline();
@@ -1487,12 +1487,12 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
       FileStatus[] allFiles = listAllBaseFilesInPath(hoodieTable);
       BaseFileOnlyView roView =
           getHoodieTableFileSystemView(metaClient, metaClient.getCommitTimeline().filterCompletedInstants(), allFiles);
-      Stream<HoodieBaseFile> dataFilesToRead = roView.getLatestBaseFiles();
-      assertFalse(dataFilesToRead.findAny().isPresent());
+      Stream<HoodieBaseFile> baseFilesToRead = roView.getLatestBaseFiles();
+      assertFalse(baseFilesToRead.findAny().isPresent());
 
       roView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-      dataFilesToRead = roView.getLatestBaseFiles();
-      assertTrue(dataFilesToRead.findAny().isPresent(),
+      baseFilesToRead = roView.getLatestBaseFiles();
+      assertTrue(baseFilesToRead.findAny().isPresent(),
           "should list the parquet files we wrote in the delta commit");
 
       /**
@@ -1597,12 +1597,12 @@ public class TestHoodieMergeOnReadTable extends HoodieClientTestHarness {
     FileStatus[] allFiles = listAllBaseFilesInPath(hoodieTable);
     BaseFileOnlyView roView =
         getHoodieTableFileSystemView(metaClient, metaClient.getCommitTimeline().filterCompletedInstants(), allFiles);
-    Stream<HoodieBaseFile> dataFilesToRead = roView.getLatestBaseFiles();
-    assertTrue(!dataFilesToRead.findAny().isPresent());
+    Stream<HoodieBaseFile> baseFilesToRead = roView.getLatestBaseFiles();
+    assertTrue(!baseFilesToRead.findAny().isPresent());
 
     roView = getHoodieTableFileSystemView(metaClient, hoodieTable.getCompletedCommitsTimeline(), allFiles);
-    dataFilesToRead = roView.getLatestBaseFiles();
-    assertTrue(dataFilesToRead.findAny().isPresent(),
+    baseFilesToRead = roView.getLatestBaseFiles();
+    assertTrue(baseFilesToRead.findAny().isPresent(),
         "should list the parquet files we wrote in the delta commit");
   }
 

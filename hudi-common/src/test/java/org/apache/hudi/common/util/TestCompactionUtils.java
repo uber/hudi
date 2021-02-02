@@ -97,30 +97,30 @@ public class TestCompactionUtils extends HoodieCommonTestHarness {
 
   @Test
   public void testBuildFromFileSlice() {
-    // Empty File-Slice with no data and log files
+    // Empty File-Slice with no base and log files
     FileSlice emptyFileSlice = new FileSlice(DEFAULT_PARTITION_PATHS[0], "000", "empty1");
     HoodieCompactionOperation op =
         CompactionUtils.buildFromFileSlice(DEFAULT_PARTITION_PATHS[0], emptyFileSlice, Option.of(metricsCaptureFn));
     testFileSliceCompactionOpEquality(emptyFileSlice, op, DEFAULT_PARTITION_PATHS[0],
         LATEST_COMPACTION_METADATA_VERSION);
 
-    // File Slice with data-file but no log files
+    // File Slice with base-file but no log files
     FileSlice noLogFileSlice = new FileSlice(DEFAULT_PARTITION_PATHS[0], "000", "noLog1");
     noLogFileSlice.setBaseFile(new DummyHoodieBaseFile("/tmp/noLog_1_000.parquet"));
     op = CompactionUtils.buildFromFileSlice(DEFAULT_PARTITION_PATHS[0], noLogFileSlice, Option.of(metricsCaptureFn));
     testFileSliceCompactionOpEquality(noLogFileSlice, op, DEFAULT_PARTITION_PATHS[0],
         LATEST_COMPACTION_METADATA_VERSION);
-    // File Slice with no data-file but log files present
-    FileSlice noDataFileSlice = new FileSlice(DEFAULT_PARTITION_PATHS[0], "000", "noData1");
-    noDataFileSlice.addLogFile(
+    // File Slice with no base-file but log files present
+    FileSlice noBaseFileSlice = new FileSlice(DEFAULT_PARTITION_PATHS[0], "000", "noData1");
+    noBaseFileSlice.addLogFile(
         new HoodieLogFile(new Path(FSUtils.makeLogFileName("noData1", ".log", "000", 1, TEST_WRITE_TOKEN))));
-    noDataFileSlice.addLogFile(
+    noBaseFileSlice.addLogFile(
         new HoodieLogFile(new Path(FSUtils.makeLogFileName("noData1", ".log", "000", 2, TEST_WRITE_TOKEN))));
-    op = CompactionUtils.buildFromFileSlice(DEFAULT_PARTITION_PATHS[0], noDataFileSlice, Option.of(metricsCaptureFn));
-    testFileSliceCompactionOpEquality(noDataFileSlice, op, DEFAULT_PARTITION_PATHS[0],
+    op = CompactionUtils.buildFromFileSlice(DEFAULT_PARTITION_PATHS[0], noBaseFileSlice, Option.of(metricsCaptureFn));
+    testFileSliceCompactionOpEquality(noBaseFileSlice, op, DEFAULT_PARTITION_PATHS[0],
         LATEST_COMPACTION_METADATA_VERSION);
 
-    // File Slice with data-file and log files present
+    // File Slice with base-file and log files present
     FileSlice fileSlice = new FileSlice(DEFAULT_PARTITION_PATHS[0], "000", "noData1");
     fileSlice.setBaseFile(new DummyHoodieBaseFile("/tmp/noLog_1_000.parquet"));
     fileSlice.addLogFile(
@@ -145,12 +145,12 @@ public class TestCompactionUtils extends HoodieCommonTestHarness {
         new Path(fullPartitionPath, new Path(FSUtils.makeLogFileName("noData1", ".log", "000", 2, TEST_WRITE_TOKEN)))));
     FileSlice noLogFileSlice = new FileSlice(DEFAULT_PARTITION_PATHS[0], "000", "noLog1");
     noLogFileSlice.setBaseFile(new DummyHoodieBaseFile(fullPartitionPath.toString() + "/noLog_1_000.parquet"));
-    FileSlice noDataFileSlice = new FileSlice(DEFAULT_PARTITION_PATHS[0], "000", "noData1");
-    noDataFileSlice.addLogFile(new HoodieLogFile(
+    FileSlice noBaseFileSlice = new FileSlice(DEFAULT_PARTITION_PATHS[0], "000", "noData1");
+    noBaseFileSlice.addLogFile(new HoodieLogFile(
         new Path(fullPartitionPath, new Path(FSUtils.makeLogFileName("noData1", ".log", "000", 1, TEST_WRITE_TOKEN)))));
-    noDataFileSlice.addLogFile(new HoodieLogFile(
+    noBaseFileSlice.addLogFile(new HoodieLogFile(
         new Path(fullPartitionPath, new Path(FSUtils.makeLogFileName("noData1", ".log", "000", 2, TEST_WRITE_TOKEN)))));
-    List<FileSlice> fileSliceList = Arrays.asList(emptyFileSlice, noDataFileSlice, fileSlice, noLogFileSlice);
+    List<FileSlice> fileSliceList = Arrays.asList(emptyFileSlice, noBaseFileSlice, fileSlice, noLogFileSlice);
     List<Pair<String, FileSlice>> input =
         fileSliceList.stream().map(f -> Pair.of(DEFAULT_PARTITION_PATHS[0], f)).collect(Collectors.toList());
     return Pair.of(input, CompactionUtils.buildFromFileSlices(input, Option.empty(), Option.of(metricsCaptureFn)));
@@ -251,9 +251,9 @@ public class TestCompactionUtils extends HoodieCommonTestHarness {
     assertEquals(slice.getBaseInstantTime(), op.getBaseInstantTime(), "Same base-instant");
     assertEquals(slice.getFileId(), op.getFileId(), "Same file-id");
     if (slice.getBaseFile().isPresent()) {
-      HoodieBaseFile df = slice.getBaseFile().get();
-      assertEquals(version == COMPACTION_METADATA_VERSION_1 ? df.getPath() : df.getFileName(),
-          op.getDataFilePath(), "Same data-file");
+      HoodieBaseFile bf = slice.getBaseFile().get();
+      assertEquals(version == COMPACTION_METADATA_VERSION_1 ? bf.getPath() : bf.getFileName(),
+          op.getDataFilePath(), "Same base-file");
     }
     List<String> paths = slice.getLogFiles().map(l -> l.getPath().toString()).collect(Collectors.toList());
     IntStream.range(0, paths.size()).boxed().forEach(idx -> assertEquals(

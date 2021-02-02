@@ -205,8 +205,8 @@ public class HoodieSnapshotExporter {
     List<Tuple2<String, String>> files = context.flatMap(partitions, partition -> {
       // Only take latest version files <= latestCommit.
       List<Tuple2<String, String>> filePaths = new ArrayList<>();
-      Stream<HoodieBaseFile> dataFiles = fsView.getLatestBaseFilesBeforeOrOn(partition, latestCommitTimestamp);
-      dataFiles.forEach(hoodieDataFile -> filePaths.add(new Tuple2<>(partition, hoodieDataFile.getPath())));
+      Stream<HoodieBaseFile> baseFiles = fsView.getLatestBaseFilesBeforeOrOn(partition, latestCommitTimestamp);
+      baseFiles.forEach(hoodieBaseFile -> filePaths.add(new Tuple2<>(partition, hoodieBaseFile.getPath())));
       // also need to copy over partition metadata
       Path partitionMetaFile =
           new Path(FSUtils.getPartitionPath(cfg.sourceBasePath, partition), HoodiePartitionMetadata.HOODIE_PARTITION_METAFILE);
