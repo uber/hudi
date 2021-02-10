@@ -428,4 +428,23 @@ class TestCOWDataSource extends HoodieClientTestBase {
 
     assertTrue(HoodieDataSourceHelpers.hasNewCommits(fs, basePath, "000"))
   }
+
+  @Test def testWithEmptyInput(): Unit = {
+    val inputDF1 = spark.read.json(spark.sparkContext.parallelize(Seq.empty[String], 1))
+    inputDF1.write.format("org.apache.hudi")
+      .options(commonOpts)
+      .option(DataSourceWriteOptions.OPERATION_OPT_KEY, DataSourceWriteOptions.INSERT_OPERATION_OPT_VAL)
+      .mode(SaveMode.Overwrite)
+      .save(basePath)
+    // Empty commit does not has a new commit
+    assertTrue(!HoodieDataSourceHelpers.hasNewCommits(fs, basePath, "000"))
+
+    inputDF1.write.format("org.apache.hudi")
+      .options(commonOpts)
+      .option(DataSourceWriteOptions.OPERATION_OPT_KEY, DataSourceWriteOptions.UPSERT_OPERATION_OPT_VAL)
+      .mode(SaveMode.Overwrite)
+      .save(basePath)
+    // Empty commit does not has a new commit
+    assertTrue(!HoodieDataSourceHelpers.hasNewCommits(fs, basePath, "000"))
+  }
 }

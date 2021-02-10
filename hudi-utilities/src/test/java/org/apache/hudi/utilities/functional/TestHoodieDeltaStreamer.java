@@ -932,14 +932,9 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     ds2.sync();
     mClient = new HoodieTableMetaClient(jsc.hadoopConfiguration(), tableBasePath, true);
     HoodieInstant newLastFinished = mClient.getCommitsTimeline().filterCompletedInstants().lastInstant().get();
-    assertTrue(HoodieTimeline.compareTimestamps(newLastFinished.getTimestamp(), HoodieTimeline.GREATER_THAN, lastFinished.getTimestamp()
+    // there is not new commit generate for empty commits
+    assertTrue(HoodieTimeline.compareTimestamps(newLastFinished.getTimestamp(), HoodieTimeline.EQUALS, lastFinished.getTimestamp()
     ));
-
-    // Ensure it is empty
-    HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
-        .fromBytes(mClient.getActiveTimeline().getInstantDetails(newLastFinished).get(), HoodieCommitMetadata.class);
-    System.out.println("New Commit Metadata=" + commitMetadata);
-    assertTrue(commitMetadata.getPartitionToWriteStats().isEmpty());
 
     // Try UPSERT with filterDupes true. Expect exception
     cfg2.filterDupes = true;
