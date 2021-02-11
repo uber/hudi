@@ -59,6 +59,8 @@ public class SparkUpgradeDowngrade extends AbstractUpgradeDowngrade {
   protected void downgrade(HoodieTableVersion fromVersion, HoodieTableVersion toVersion, String instantTime) {
     if (fromVersion == HoodieTableVersion.ONE && toVersion == HoodieTableVersion.ZERO) {
       new OneToZeroDowngradeHandler().downgrade(config, context, instantTime);
+    } else if (fromVersion == HoodieTableVersion.TWO && toVersion == HoodieTableVersion.ONE) {
+      new TwoToOneDowngradeHandler().downgrade(config, context, instantTime);
     } else {
       throw new HoodieUpgradeDowngradeException(fromVersion.versionCode(), toVersion.versionCode(), false);
     }
