@@ -27,6 +27,7 @@ import org.apache.hudi.sync.common.AbstractSyncHoodieClient.PartitionEvent;
 import org.apache.hudi.sync.common.AbstractSyncHoodieClient.PartitionEvent.PartitionEventType;
 
 import org.apache.hadoop.hive.metastore.api.Partition;
+import org.apache.hudi.sync.common.SchemaDifference;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
@@ -40,6 +41,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -87,7 +89,7 @@ public class TestHiveSyncTool {
         .named("ArrayOfInts");
 
     String schemaString = HiveSchemaUtil.generateSchemaString(schema);
-    assertEquals("`int_list` ARRAY< int>", schemaString);
+    assertEquals("int_list ARRAY<int>", schemaString);
 
     // A array of arrays
     schema = Types.buildMessage().optionalGroup().as(OriginalType.LIST).repeatedGroup().requiredGroup()
@@ -95,14 +97,14 @@ public class TestHiveSyncTool {
         .named("list").named("element").named("list").named("int_list_list").named("ArrayOfArrayOfInts");
 
     schemaString = HiveSchemaUtil.generateSchemaString(schema);
-    assertEquals("`int_list_list` ARRAY< ARRAY< int>>", schemaString);
+    assertEquals("int_list_list ARRAY<ARRAY<int>>", schemaString);
 
     // A list of integers
     schema = Types.buildMessage().optionalGroup().as(OriginalType.LIST).repeated(PrimitiveType.PrimitiveTypeName.INT32)
         .named("element").named("int_list").named("ArrayOfInts");
 
     schemaString = HiveSchemaUtil.generateSchemaString(schema);
-    assertEquals("`int_list` ARRAY< int>", schemaString);
+    assertEquals("int_list ARRAY<int>", schemaString);
 
     // A list of structs with two fields
     schema = Types.buildMessage().optionalGroup().as(OriginalType.LIST).repeatedGroup()
@@ -110,7 +112,7 @@ public class TestHiveSyncTool {
         .named("num").named("element").named("tuple_list").named("ArrayOfTuples");
 
     schemaString = HiveSchemaUtil.generateSchemaString(schema);
-    assertEquals("`tuple_list` ARRAY< STRUCT< `str` : binary, `num` : int>>", schemaString);
+    assertEquals("tuple_list ARRAY<STRUCT<str:binary,num:int>>", schemaString);
 
     // A list of structs with a single field
     // For this case, since the inner group name is "array", we treat the
@@ -120,7 +122,7 @@ public class TestHiveSyncTool {
         .named("ArrayOfOneTuples");
 
     schemaString = HiveSchemaUtil.generateSchemaString(schema);
-    assertEquals("`one_tuple_list` ARRAY< STRUCT< `str` : binary>>", schemaString);
+    assertEquals("one_tuple_list ARRAY<STRUCT<str:binary>>", schemaString);
 
     // A list of structs with a single field
     // For this case, since the inner group name ends with "_tuple", we also treat the
@@ -130,7 +132,7 @@ public class TestHiveSyncTool {
         .named("one_tuple_list").named("ArrayOfOneTuples2");
 
     schemaString = HiveSchemaUtil.generateSchemaString(schema);
-    assertEquals("`one_tuple_list` ARRAY< STRUCT< `str` : binary>>", schemaString);
+    assertEquals("one_tuple_list ARRAY<STRUCT<str:binary>>", schemaString);
 
     // A list of structs with a single field
     // Unlike the above two cases, for this the element type is the type of the
@@ -140,7 +142,7 @@ public class TestHiveSyncTool {
         .named("ArrayOfOneTuples3");
 
     schemaString = HiveSchemaUtil.generateSchemaString(schema);
-    assertEquals("`one_tuple_list` ARRAY< binary>", schemaString);
+    assertEquals("one_tuple_list ARRAY<binary>", schemaString);
 
     // A list of maps
     schema = Types.buildMessage().optionalGroup().as(OriginalType.LIST).repeatedGroup().as(OriginalType.MAP)
@@ -149,7 +151,7 @@ public class TestHiveSyncTool {
         .named("key_value").named("array").named("map_list").named("ArrayOfMaps");
 
     schemaString = HiveSchemaUtil.generateSchemaString(schema);
-    assertEquals("`map_list` ARRAY< MAP< string, int>>", schemaString);
+    assertEquals("map_list ARRAY<MAP<string,int>>", schemaString);
   }
 
   @Test
@@ -158,10 +160,10 @@ public class TestHiveSyncTool {
         .as(OriginalType.TIMESTAMP_MICROS).named("my_element").named("my_timestamp");
     String schemaString = HiveSchemaUtil.generateSchemaString(schema);
     // verify backward compability - int64 converted to bigint type
-    assertEquals("`my_element` bigint", schemaString);
+    assertEquals("my_element bigint", schemaString);
     // verify new functionality - int64 converted to timestamp type when 'supportTimestamp' is enabled
     schemaString = HiveSchemaUtil.generateSchemaString(schema, Collections.emptyList(), true);
-    assertEquals("`my_element` TIMESTAMP", schemaString);
+    assertEquals("my_element TIMESTAMP", schemaString);
   }
 
   @Test
@@ -171,7 +173,7 @@ public class TestHiveSyncTool {
     // verify backward compability - int64 converted to bigint type
     SchemaDifference schemaDifference = HiveSchemaUtil.getSchemaDifference(schema,
         Collections.emptyMap(), Collections.emptyList(), false);
-    assertEquals("bigint", schemaDifference.getAddColumnTypes().get("`my_element`"));
+    assertEquals("bigint", schemaDifference.getAddColumnTypes().get("my_element"));
     schemaDifference = HiveSchemaUtil.getSchemaDifference(schema,
         schemaDifference.getAddColumnTypes(), Collections.emptyList(), false);
     assertTrue(schemaDifference.isEmpty());
@@ -179,7 +181,7 @@ public class TestHiveSyncTool {
     // verify schema difference is calculated correctly when supportTimestamp is enabled
     schemaDifference = HiveSchemaUtil.getSchemaDifference(schema,
         Collections.emptyMap(), Collections.emptyList(), true);
-    assertEquals("TIMESTAMP", schemaDifference.getAddColumnTypes().get("`my_element`"));
+    assertEquals("TIMESTAMP", schemaDifference.getAddColumnTypes().get("my_element"));
     schemaDifference = HiveSchemaUtil.getSchemaDifference(schema,
         schemaDifference.getAddColumnTypes(), Collections.emptyList(), true);
     assertTrue(schemaDifference.isEmpty());
@@ -228,8 +230,11 @@ public class TestHiveSyncTool {
     // Alter partitions
     // Manually change a hive partition location to check if the sync will detect
     // it and generage a partition update event for it.
-    hiveClient.updateHiveSQL("ALTER TABLE `" + HiveTestUtil.hiveSyncConfig.tableName
-        + "` PARTITION (`datestr`='2050-01-01') SET LOCATION '/some/new/location'");
+    List<String> changedPartitions = new ArrayList<>();
+    changedPartitions.add("2050-01-01");
+    Partition partition = new Partition(changedPartitions, HiveTestUtil.hiveSyncConfig.databaseName, HiveTestUtil.hiveSyncConfig.tableName,
+            0, 0, null, null);
+    hiveClient.updatePartitionToTable(HiveTestUtil.hiveSyncConfig.tableName, partition, "/some/new/location");
 
     hiveClient = new HoodieHiveClient(HiveTestUtil.hiveSyncConfig, HiveTestUtil.getHiveConf(), HiveTestUtil.fileSystem);
     List<Partition> hivePartitions = hiveClient.scanTablePartitions(HiveTestUtil.hiveSyncConfig.tableName);

@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hudi.sync.common.AbstractSyncTool;
+import org.apache.hudi.sync.common.SchemaDifference;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.parquet.schema.MessageType;
@@ -118,13 +119,13 @@ public class HiveSyncTool extends AbstractSyncTool {
     // check if the database exists else create it
     if (cfg.autoCreateDatabase) {
       try {
-        hoodieHiveClient.updateHiveSQL("create database if not exists " + cfg.databaseName);
+        hoodieHiveClient.createDatabase(cfg.databaseName,null,"automatically created by hoodie");
       } catch (Exception e) {
         // this is harmless since table creation will fail anyways, creation of DB is needed for in-memory testing
-        LOG.warn("Unable to create database", e);
+        LOG.warn("Unable to create database " + cfg.databaseName, e);
       }
     } else {
-      if (!hoodieHiveClient.doesDataBaseExist(cfg.databaseName)) {
+      if (!hoodieHiveClient.doesDatabaseExist(cfg.databaseName)) {
         throw new HoodieHiveSyncException("hive database does not exist " + cfg.databaseName);
       }
     }
