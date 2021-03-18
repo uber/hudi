@@ -175,7 +175,8 @@ public abstract class AbstractHoodieWriteClient<T extends HoodieRecordPayload, I
     // Create a Hoodie table which encapsulated the commits and files visible
     HoodieTable table = createTable(config, hadoopConf);
     HoodieActiveTimeline activeTimeline = table.getActiveTimeline();
-    HoodieCommitMetadata metadata = CommitUtils.buildMetadata(stats, partitionToReplaceFileIds, extraMetadata, operationType, config.getSchema(), commitActionType);
+    HoodieCommitMetadata metadata = CommitUtils.buildMetadata(stats, partitionToReplaceFileIds, extraMetadata, operationType, config.getSchema(),
+        commitActionType, config.updatePartialFields(), table.getMetaClient());
     // Finalize write
     finalizeWrite(table, instantTime, stats);
     HeartbeatUtils.abortIfHeartbeatExpired(instantTime, table, heartbeatClient, config);
