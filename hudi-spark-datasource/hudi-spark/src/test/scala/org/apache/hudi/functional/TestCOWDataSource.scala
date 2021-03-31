@@ -31,9 +31,11 @@ import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWr
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, concat, lit, udf}
 import org.apache.spark.sql.types._
+import org.junit.jupiter.api.Assertions.fail
+import org.apache.spark.sql.types.{DataTypes => _, DateType => _, IntegerType => _, StringType => _, TimestampType => _, _}
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
-import org.junit.jupiter.api.Assertions.{assertEquals, assertTrue, fail}
+import org.junit.jupiter.api.Assertions.{assertEquals, assertTrue}
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
@@ -618,5 +620,57 @@ class TestCOWDataSource extends HoodieClientTestBase {
     recordsReadDF = spark.read.format("org.apache.hudi")
       .load(basePath + "/*")
     assertTrue(recordsReadDF.filter(col("_hoodie_partition_path") =!= lit("")).count() == 0)
+  }
+
+  @Test def testAutoInferDataPath(): Unit = {
+    val records1 = recordsToStrings(dataGen.generateInserts("000", 100)).toList
+    val inputDF1 = spark.read.json(spark.sparkContext.parallelize(records1, 2))
+    // Default partition
+    inputDF1.write.format("org.apache.hudi")
+      .options(commonOpts)
+      .mode(SaveMode.Overwrite)
+      .save(basePath)
+
+    // No need to specify basePath/*/*
+    spark.read.format("org.apache.hudi")
+      .load(basePath).show()
+
+    // Partition with org.apache.hudi.keygen.CustomKeyGenerator
+    inputDF1.write.format("org.apache.hudi")
+      .options(commonOpts)
+      .option(DataSourceWriteOptions.KEYGENERATOR_CLASS_OPT_KEY, "org.apache.hudi.keygen.CustomKeyGenerator")
+      .option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, "rider:SIMPLE,begin_lon:SIMPLE,end_lon:SIMPLE")
+      .mode(SaveMode.Overwrite)
+      .save(basePath)
+
+    // No need to specify basePath/*/*/*/*
+    spark.read.format("org.apache.hudi")
+      .load(basePath).show()
+
+    // No partition
+    inputDF1.write.format("org.apache.hudi")
+      .options(commonOpts)
+      .option(DataSourceWriteOptions.KEYGENERATOR_CLASS_OPT_KEY, "org.apache.hudi.keygen.NonpartitionedKeyGenerator")
+      .option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, "")
+      .mode(SaveMode.Overwrite)
+      .save(basePath)
+
+    // No need to specify basePath/*
+    spark.read.format("org.apache.hudi")
+      .load(basePath).show()
+
+    inputDF1.write.format("org.apache.hudi")
+      .options(commonOpts)
+      .option(DataSourceWriteOptions.KEYGENERATOR_CLASS_OPT_KEY, "org.apache.hudi.keygen.CustomKeyGenerator")
+      .option(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY, "current_ts:TIMESTAMP")
+      .option(Config.TIMESTAMP_TYPE_FIELD_PROP, "EPOCHMILLISECONDS")
+      .option(Config.TIMESTAMP_OUTPUT_DATE_FORMAT_PROP, "yyyyMMdd")
+      .mode(SaveMode.Overwrite)
+      .save(basePath)
+
+    // Specify basePath/yyyyMMdd/*
+    val date = new DateTime().toString(DateTimeFormat.forPattern("yyyyMMdd"))
+    spark.read.format("org.apache.hudi")
+      .load(basePath + s"/$date/*").show()
   }
 }
