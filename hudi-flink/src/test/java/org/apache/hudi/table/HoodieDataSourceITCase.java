@@ -237,12 +237,12 @@ public class HoodieDataSourceITCase extends AbstractTestBase {
 
     List<Row> result = execSelectSql(streamTableEnv, "select * from t1", 10);
     final String expected = "["
-        + "id1,Danny,24,1970-01-01T00:00:00.001,par1, "
-        + "id2,Stephen,34,1970-01-01T00:00:00.002,par1, "
-        + "id3,null,null,null,null, "
-        + "id5,null,null,null,null, "
-        + "id9,null,null,null,null]";
-    assertRowsEquals(result, expected);
+        + "+I(id1,Danny,24,1970-01-01T00:00:00.001,par1), "
+        + "+I(id2,Stephen,34,1970-01-01T00:00:00.002,par1), "
+        + "-D(id3,Julian,53,1970-01-01T00:00:00.003,par2), "
+        + "-D(id5,Sophia,18,1970-01-01T00:00:00.005,par3), "
+        + "-D(id9,Jane,19,1970-01-01T00:00:00.006,par3)]";
+    assertRowsEquals(result, expected, true);
   }
 
   @ParameterizedTest
