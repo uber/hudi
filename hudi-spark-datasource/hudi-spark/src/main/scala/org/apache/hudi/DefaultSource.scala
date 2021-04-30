@@ -24,7 +24,7 @@ import org.apache.hudi.DataSourceWriteOptions.{BOOTSTRAP_OPERATION_OPT_VAL, OPER
 import org.apache.hudi.common.fs.FSUtils
 import org.apache.hudi.common.model.HoodieTableType.{COPY_ON_WRITE, MERGE_ON_READ}
 import org.apache.hudi.common.table.{HoodieTableMetaClient, TableSchemaResolver}
-import org.apache.hudi.exception.HoodieException
+import org.apache.hudi.exception.{HoodieException, InvalidTableException}
 import org.apache.hudi.hadoop.HoodieROTablePathFilter
 import org.apache.log4j.LogManager
 import org.apache.spark.sql.avro.SchemaConverters
@@ -107,7 +107,9 @@ class DefaultSource extends RelationProvider
     val tableType = metaClient.getTableType
     val queryType = parameters.getOrElse(QUERY_TYPE_OPT_KEY.key, QUERY_TYPE_OPT_KEY.defaultValue)
     log.info(s"Is bootstrapped table => $isBootstrappedTable, tableType is: $tableType")
-
+    val schemaUtil = new TableSchemaResolver(metaClient)
+    schemaUtil.getTableAvroSchema(false) // this will throw InValidTableException if there is no
+    // valid data found.
     (tableType, queryType, isBootstrappedTable) match {
       case (COPY_ON_WRITE, QUERY_TYPE_SNAPSHOT_OPT_VAL, false) |
            (COPY_ON_WRITE, QUERY_TYPE_READ_OPTIMIZED_OPT_VAL, false) |

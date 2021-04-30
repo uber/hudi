@@ -77,7 +77,9 @@ public class TableSchemaResolver {
           // If this is COW, get the last commit and read the schema from a file written in the
           // last commit
           HoodieInstant lastCommit =
-              activeTimeline.getCommitsTimeline().filterCompletedInstants().lastInstant().orElseThrow(() -> new InvalidTableException(metaClient.getBasePath()));
+              activeTimeline.getCommitsTimeline().filterCompletedInstants().lastInstant().orElseThrow(() -> new InvalidTableException(metaClient.getBasePath()
+                  + ". Either table does not exist or there is no valid commits."));
+          LOG.warn("Lst commit " + lastCommit != null ? lastCommit.toString() : "null");
           HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
               .fromBytes(activeTimeline.getInstantDetails(lastCommit).get(), HoodieCommitMetadata.class);
           String filePath = commitMetadata.getFileIdAndFullPaths(metaClient.getBasePath()).values().stream().findAny()
@@ -130,7 +132,11 @@ public class TableSchemaResolver {
                     + " for file " + filePathWithFormat.getLeft());
             }
           } else {
-            return readSchemaFromLastCompaction(lastCompactionCommit);
+            if (lastCompactionCommit.isPresent()) {
+              return readSchemaFromLastCompaction(lastCompactionCommit);
+            } else {
+              throw new InvalidTableException("No valid commits found for " + metaClient.getBasePath());
+            }
           }
         default:
           LOG.error("Unknown table type " + metaClient.getTableType());
@@ -236,7 +242,6 @@ public class TableSchemaResolver {
       return Option.empty();
     }
   }
-
 
   /**
    * Gets the schema for a hoodie table in Avro format from the HoodieCommitMetadata of the instant.
