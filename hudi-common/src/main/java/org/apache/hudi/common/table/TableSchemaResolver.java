@@ -79,7 +79,6 @@ public class TableSchemaResolver {
           HoodieInstant lastCommit =
               activeTimeline.getCommitsTimeline().filterCompletedInstants().lastInstant().orElseThrow(() -> new InvalidTableException(metaClient.getBasePath()
                   + ". Either table does not exist or there is no valid commits."));
-          LOG.warn("Lst commit " + lastCommit != null ? lastCommit.toString() : "null");
           HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
               .fromBytes(activeTimeline.getInstantDetails(lastCommit).get(), HoodieCommitMetadata.class);
           String filePath = commitMetadata.getFileIdAndFullPaths(metaClient.getBasePath()).values().stream().findAny()
@@ -248,10 +247,13 @@ public class TableSchemaResolver {
    *
    * @return Avro schema for this table
    */
-  private Option<Schema> getTableSchemaFromCommitMetadata(HoodieInstant instant, boolean includeMetadataFields) {
+  private Option<Schema> getTableSchemaFromCommitMetadata(Option<HoodieInstant> instant, boolean includeMetadataFields) {
     try {
+      if (!instant.isPresent()) {
+        return Option.empty();
+      }
       HoodieTimeline timeline = metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants();
-      byte[] data = timeline.getInstantDetails(instant).get();
+      byte[] data = timeline.getInstantDetails(instant.get()).get();
       HoodieCommitMetadata metadata = HoodieCommitMetadata.fromBytes(data, HoodieCommitMetadata.class);
       String existingSchemaStr = metadata.getMetadata(HoodieCommitMetadata.SCHEMA_KEY);
 
