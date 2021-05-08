@@ -30,7 +30,9 @@ public enum HoodieTableVersion {
   // < 0.6.0 versions
   ZERO(0),
   // 0.6.0 onwards
-  ONE(1);
+  ONE(1),
+  // 0.8.0 onwards
+  TWO(2);
 
   private final int versionCode;
 

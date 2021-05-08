@@ -29,6 +29,7 @@ import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.timeline.HoodieActiveTimeline;
 import org.apache.hudi.common.table.timeline.HoodieArchivedTimeline;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.table.timeline.HoodieInstantFormat;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.timeline.TimelineLayout;
 import org.apache.hudi.common.table.timeline.versioning.TimelineLayoutVersion;
@@ -476,14 +477,14 @@ public class HoodieTableMetaClient implements Serializable {
         HoodieTableMetaClient
             .scanFiles(getFs(), timelinePath, path -> {
               // Include only the meta files with extensions that needs to be included
-              String extension = HoodieInstant.getTimelineFileExtension(path.getName());
+              String extension = HoodieInstantFormat.getInstantFormat(getTimelineLayoutVersion()).getTimelineFileExtension(path.getName());
               return includedExtensions.contains(extension);
-            })).map(HoodieInstant::new);
+            })).map(s -> new HoodieInstant(s, timelineLayoutVersion));
 
     if (applyLayoutVersionFilters) {
       instantStream = TimelineLayout.getLayout(getTimelineLayoutVersion()).filterHoodieInstants(instantStream);
     }
-    return instantStream.sorted().collect(Collectors.toList());
+    return TimelineLayout.getLayout(getTimelineLayoutVersion()).sortHoodieInstants(instantStream).collect(Collectors.toList());
   }
 
   @Override

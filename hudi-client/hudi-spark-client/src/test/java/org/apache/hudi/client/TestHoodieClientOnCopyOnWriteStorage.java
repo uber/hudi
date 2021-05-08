@@ -1998,7 +1998,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
         .withCompactionConfig(HoodieCompactionConfig.newBuilder()
             .withFailedWritesCleaningPolicy(cleaningPolicy)
             .withAutoClean(false).build())
-        .withTimelineLayoutVersion(1)
+        .withTimelineLayoutVersion(2)
         .withHeartbeatIntervalInMs(3 * 1000)
         .withAutoCommit(false).build();
   }

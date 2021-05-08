@@ -70,7 +70,7 @@ public class CommitsCommand implements CommandMarker {
     final List<HoodieInstant> commits = timeline.getCommitsTimeline().filterCompletedInstants()
             .getInstants().collect(Collectors.toList());
     // timeline can be read from multiple files. So sort is needed instead of reversing the collection
-    Collections.sort(commits, HoodieInstant.COMPARATOR.reversed());
+    Collections.sort(commits, HoodieInstant.START_INSTANT_TIME_COMPARATOR.reversed());
 
     for (int i = 0; i < commits.size(); i++) {
       final HoodieInstant commit = commits.get(i);
@@ -116,7 +116,7 @@ public class CommitsCommand implements CommandMarker {
     final List<HoodieInstant> commits = timeline.getCommitsTimeline().filterCompletedInstants()
             .getInstants().collect(Collectors.toList());
     // timeline can be read from multiple files. So sort is needed instead of reversing the collection
-    Collections.sort(commits, HoodieInstant.COMPARATOR.reversed());
+    Collections.sort(commits, HoodieInstant.START_INSTANT_TIME_COMPARATOR.reversed());
 
     for (int i = 0; i < commits.size(); i++) {
       final HoodieInstant commit = commits.get(i);
