@@ -17,21 +17,19 @@
 
 package org.apache.hudi.functional
 
-import java.time.Instant
-import java.util
-import java.util.{Collections, Date, UUID}
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hudi.DataSourceWriteOptions._
 import org.apache.hudi.client.{SparkRDDWriteClient, TestBootstrap}
 import org.apache.hudi.common.config.HoodieConfig
 import org.apache.hudi.common.model.{HoodieRecord, HoodieRecordPayload}
-import org.apache.hudi.common.testutils.HoodieTestDataGenerator
+import org.apache.hudi.common.table.HoodieTableMetaClient
+import org.apache.hudi.common.testutils.{HoodieTestDataGenerator, HoodieTestTable}
 import org.apache.hudi.config.{HoodieBootstrapConfig, HoodieWriteConfig}
-import org.apache.hudi.exception.HoodieException
+import org.apache.hudi.exception.{HoodieException, InvalidTableException}
 import org.apache.hudi.execution.bulkinsert.BulkInsertSortMode
-import org.apache.hudi.keygen.{NonpartitionedKeyGenerator, SimpleKeyGenerator}
 import org.apache.hudi.hive.HiveSyncConfig
+import org.apache.hudi.keygen.{NonpartitionedKeyGenerator, SimpleKeyGenerator}
 import org.apache.hudi.testutils.DataSourceTestUtils
 import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceUtils, DataSourceWriteOptions, HoodieSparkSqlWriter, HoodieWriterUtils}
 import org.apache.spark.SparkContext
@@ -40,12 +38,15 @@ import org.apache.spark.sql.functions.{expr, lit}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{Row, SQLContext, SaveMode, SparkSession}
+import org.junit.jupiter.api.Assertions.{assertEquals, assertFalse, assertTrue}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{spy, times, verify}
 import org.scalatest.{FunSuite, Matchers}
 
+import java.time.Instant
+import java.util
+import java.util.{Collections, Date, Properties, UUID}
 import scala.collection.JavaConversions._
-import org.junit.jupiter.api.Assertions.{assertEquals, assertFalse, assertTrue}
 
 class HoodieSparkSqlWriterSuite extends FunSuite with Matchers {
 
@@ -272,7 +273,42 @@ class HoodieSparkSqlWriterSuite extends FunSuite with Matchers {
     }
   }
 
-  test("test bulk insert dataset with datasource impl multiple rounds") {
+  test("test read of a table with one failed write") {
+    initSparkContext("test_read_table_with_one_failed_write")
+    val path = java.nio.file.Files.createTempDirectory("hoodie_test_path")
+    try {
+      val hoodieFooTableName = "hoodie_foo_tbl"
+      val fooTableModifier = Map("path" -> path.toAbsolutePath.toString,
+        HoodieWriteConfig.TABLE_NAME.key() -> hoodieFooTableName,
+        DataSourceWriteOptions.RECORDKEY_FIELD_OPT_KEY.key() -> "_row_key",
+        DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY.key() -> "partition")
+
+      val fooTableParams = HoodieWriterUtils.parametersWithWriteDefaults(fooTableModifier)
+      val props = new Properties()
+      fooTableParams.foreach(entry => props.setProperty(entry._1, entry._2))
+      val metaClient = HoodieTableMetaClient.initTableAndGetMetaClient(spark.sparkContext.hadoopConfiguration, path.toAbsolutePath.toString, props)
+
+      val partitionAndFileId = new util.HashMap[String, String]()
+      partitionAndFileId.put(HoodieTestDataGenerator.DEFAULT_FIRST_PARTITION_PATH, "file-1")
+
+      HoodieTestTable.of(metaClient).withPartitionMetaFiles(HoodieTestDataGenerator.DEFAULT_FIRST_PARTITION_PATH)
+        .addInflightCommit("001")
+        .withBaseFilesInPartitions(partitionAndFileId)
+
+      val snapshotDF1 = spark.read.format("org.apache.hudi")
+        .load(path.toAbsolutePath.toString + "/*/*/*/*")
+      snapshotDF1.count()
+      assertFalse(true)
+    }  catch {
+      case e: InvalidTableException =>
+        assertTrue(e.getMessage.contains("Invalid Hoodie Table"))
+    } finally {
+      spark.stop()
+      FileUtils.deleteDirectory(path.toFile)
+    }
+  }
+
+      test("test bulk insert dataset with datasource impl multiple rounds") {
     initSparkContext("test_bulk_insert_datasource")
     val path = java.nio.file.Files.createTempDirectory("hoodie_test_path")
     try {

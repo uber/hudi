@@ -107,9 +107,10 @@ class DefaultSource extends RelationProvider
     val tableType = metaClient.getTableType
     val queryType = parameters.getOrElse(QUERY_TYPE_OPT_KEY.key, QUERY_TYPE_OPT_KEY.defaultValue)
     log.info(s"Is bootstrapped table => $isBootstrappedTable, tableType is: $tableType")
-    val schemaUtil = new TableSchemaResolver(metaClient)
-    schemaUtil.getTableAvroSchema(false) // this will throw InValidTableException if there is no
-    // valid data found.
+    if (metaClient.getCommitsTimeline.filterCompletedInstants.empty()) {
+      throw new InvalidTableException("No valid commits found in the given path " + metaClient.getBasePath)
+    }
+
     (tableType, queryType, isBootstrappedTable) match {
       case (COPY_ON_WRITE, QUERY_TYPE_SNAPSHOT_OPT_VAL, false) |
            (COPY_ON_WRITE, QUERY_TYPE_READ_OPTIMIZED_OPT_VAL, false) |

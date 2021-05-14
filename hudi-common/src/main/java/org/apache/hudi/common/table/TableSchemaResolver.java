@@ -77,8 +77,7 @@ public class TableSchemaResolver {
           // If this is COW, get the last commit and read the schema from a file written in the
           // last commit
           HoodieInstant lastCommit =
-              activeTimeline.getCommitsTimeline().filterCompletedInstants().lastInstant().orElseThrow(() -> new InvalidTableException(metaClient.getBasePath()
-                  + ". Either table does not exist or there is no valid commits."));
+              activeTimeline.getCommitsTimeline().filterCompletedInstants().lastInstant().orElseThrow(() -> new InvalidTableException(metaClient.getBasePath()));
           HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
               .fromBytes(activeTimeline.getInstantDetails(lastCommit).get(), HoodieCommitMetadata.class);
           String filePath = commitMetadata.getFileIdAndFullPaths(metaClient.getBasePath()).values().stream().findAny()
@@ -131,11 +130,7 @@ public class TableSchemaResolver {
                     + " for file " + filePathWithFormat.getLeft());
             }
           } else {
-            if (lastCompactionCommit.isPresent()) {
-              return readSchemaFromLastCompaction(lastCompactionCommit);
-            } else {
-              throw new InvalidTableException("No valid commits found for " + metaClient.getBasePath());
-            }
+            return readSchemaFromLastCompaction(lastCompactionCommit);
           }
         default:
           LOG.error("Unknown table type " + metaClient.getTableType());
@@ -242,18 +237,16 @@ public class TableSchemaResolver {
     }
   }
 
+
   /**
    * Gets the schema for a hoodie table in Avro format from the HoodieCommitMetadata of the instant.
    *
    * @return Avro schema for this table
    */
-  private Option<Schema> getTableSchemaFromCommitMetadata(Option<HoodieInstant> instant, boolean includeMetadataFields) {
+  private Option<Schema> getTableSchemaFromCommitMetadata(HoodieInstant instant, boolean includeMetadataFields) {
     try {
-      if (!instant.isPresent()) {
-        return Option.empty();
-      }
       HoodieTimeline timeline = metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants();
-      byte[] data = timeline.getInstantDetails(instant.get()).get();
+      byte[] data = timeline.getInstantDetails(instant).get();
       HoodieCommitMetadata metadata = HoodieCommitMetadata.fromBytes(data, HoodieCommitMetadata.class);
       String existingSchemaStr = metadata.getMetadata(HoodieCommitMetadata.SCHEMA_KEY);
 
