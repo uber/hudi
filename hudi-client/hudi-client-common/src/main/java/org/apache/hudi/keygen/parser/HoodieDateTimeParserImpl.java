@@ -22,23 +22,17 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.keygen.TimestampBasedAvroKeyGenerator.TimestampType;
 import org.apache.hudi.keygen.TimestampBasedAvroKeyGenerator.Config;
 import org.apache.hudi.keygen.KeyGenUtils;
-import org.joda.time.DateTimeZone;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
-import org.joda.time.format.DateTimeFormatterBuilder;
-import org.joda.time.format.DateTimeParser;
 
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.TimeZone;
 
 public class HoodieDateTimeParserImpl extends AbstractHoodieDateTimeParser {
 
   private String configInputDateFormatList;
-
-  // TimeZone detailed settings reference
-  // https://docs.oracle.com/javase/8/docs/api/java/util/TimeZone.html
-  private final DateTimeZone inputDateTimeZone;
+  private final ZoneId inputDateTimeZone;
 
   public HoodieDateTimeParserImpl(TypedProperties config) {
     super(config);
@@ -51,22 +45,13 @@ public class HoodieDateTimeParserImpl extends AbstractHoodieDateTimeParser {
       throw new IllegalArgumentException(Config.TIMESTAMP_INPUT_DATE_FORMAT_PROP + " configuration is required");
     }
 
-    DateTimeFormatter formatter = new DateTimeFormatterBuilder()
-        .append(
-        null,
-        Arrays.stream(
-          this.configInputDateFormatList.split(super.configInputDateFormatDelimiter))
-          .map(String::trim)
-          .map(DateTimeFormat::forPattern)
-          .map(DateTimeFormatter::getParser)
-          .toArray(DateTimeParser[]::new))
-        .toFormatter();
+    DateTimeFormatterBuilder formatterBuilder = new DateTimeFormatterBuilder();
+    Arrays.stream(this.configInputDateFormatList.split(super.configInputDateFormatDelimiter))
+            .map(String::trim).map(DateTimeFormatter::ofPattern).forEach(formatterBuilder::append);
+    DateTimeFormatter formatter = formatterBuilder.toFormatter();
     if (this.inputDateTimeZone != null) {
       formatter = formatter.withZone(this.inputDateTimeZone);
-    } else {
-      formatter = formatter.withOffsetParsed();
     }
-
     return formatter;
   }
 
@@ -89,25 +74,25 @@ public class HoodieDateTimeParserImpl extends AbstractHoodieDateTimeParser {
   }
 
   @Override
-  public DateTimeZone getInputDateTimeZone() {
+  public ZoneId getInputDateTimeZone() {
     String inputTimeZone;
     if (config.containsKey(Config.TIMESTAMP_TIMEZONE_FORMAT_PROP)) {
       inputTimeZone = config.getString(Config.TIMESTAMP_TIMEZONE_FORMAT_PROP, "GMT");
     } else {
       inputTimeZone = config.getString(Config.TIMESTAMP_INPUT_TIMEZONE_FORMAT_PROP, "");
     }
-    return !inputTimeZone.trim().isEmpty() ? DateTimeZone.forTimeZone(TimeZone.getTimeZone(inputTimeZone)) : null;
+    return !inputTimeZone.trim().isEmpty() ? ZoneId.of(inputTimeZone) : null;
   }
 
   @Override
-  public DateTimeZone getOutputDateTimeZone() {
+  public ZoneId getOutputDateTimeZone() {
     String outputTimeZone;
     if (config.containsKey(Config.TIMESTAMP_TIMEZONE_FORMAT_PROP)) {
       outputTimeZone = config.getString(Config.TIMESTAMP_TIMEZONE_FORMAT_PROP, "GMT");
     } else {
       outputTimeZone = config.getString(Config.TIMESTAMP_OUTPUT_TIMEZONE_FORMAT_PROP, "");
     }
-    return !outputTimeZone.trim().isEmpty() ? DateTimeZone.forTimeZone(TimeZone.getTimeZone(outputTimeZone)) : null;
+    return !outputTimeZone.trim().isEmpty() ? ZoneId.of(outputTimeZone) : null;
   }
 
 }

@@ -35,7 +35,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.ql.Driver;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.joda.time.DateTime;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +44,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -329,7 +329,7 @@ public class TestHiveSyncTool {
         "The last commit that was synced should be updated in the TBLPROPERTIES");
 
     // Now lets create more partitions and these are the only ones which needs to be synced
-    DateTime dateTime = DateTime.now().plusDays(6);
+    ZonedDateTime dateTime = ZonedDateTime.now().plusDays(6);
     String commitTime2 = "101";
     HiveTestUtil.addCOWPartitions(1, true, true, dateTime, commitTime2);
 
@@ -367,7 +367,7 @@ public class TestHiveSyncTool {
     int fields = hiveClient.getTableSchema(HiveTestUtil.hiveSyncConfig.tableName).size();
 
     // Now lets create more partitions and these are the only ones which needs to be synced
-    DateTime dateTime = DateTime.now().plusDays(6);
+    ZonedDateTime dateTime = ZonedDateTime.now().plusDays(6);
     String commitTime2 = "101";
     HiveTestUtil.addCOWPartitions(1, false, true, dateTime, commitTime2);
 
@@ -426,7 +426,7 @@ public class TestHiveSyncTool {
         "The last commit that was synced should be updated in the TBLPROPERTIES");
 
     // Now lets create more partitions and these are the only ones which needs to be synced
-    DateTime dateTime = DateTime.now().plusDays(6);
+    ZonedDateTime dateTime = ZonedDateTime.now().plusDays(6);
     String commitTime2 = "102";
     String deltaCommitTime2 = "103";
 
@@ -498,7 +498,7 @@ public class TestHiveSyncTool {
         "The last commit that was synced should be updated in the TBLPROPERTIES");
 
     // Now lets create more partitions and these are the only ones which needs to be synced
-    DateTime dateTime = DateTime.now().plusDays(6);
+    ZonedDateTime dateTime = ZonedDateTime.now().plusDays(6);
     String commitTime2 = "102";
     String deltaCommitTime2 = "103";
 
@@ -661,7 +661,7 @@ public class TestHiveSyncTool {
     assertEquals(5, hiveClientRT.scanTablePartitions(snapshotTableName).size(), "Table partitions should match the number of partitions we wrote");
 
     // Now lets create more partitions and these are the only ones which needs to be synced
-    DateTime dateTime = DateTime.now().plusDays(6);
+    ZonedDateTime dateTime = ZonedDateTime.now().plusDays(6);
     String commitTime2 = "102";
     String deltaCommitTime2 = "103";
 
@@ -758,7 +758,7 @@ public class TestHiveSyncTool {
     HoodieCommitMetadata commitMetadata = new HoodieCommitMetadata();
 
     // evolve the schema
-    DateTime dateTime = DateTime.now().plusDays(6);
+    ZonedDateTime dateTime = ZonedDateTime.now().plusDays(6);
     String commitTime2 = "101";
     HiveTestUtil.addCOWPartitions(1, false, true, dateTime, commitTime2);
 
@@ -814,7 +814,7 @@ public class TestHiveSyncTool {
     verifyOldParquetFileTest(hiveClient, emptyCommitTime);
 
     // evolve the schema
-    DateTime dateTime = DateTime.now().plusDays(6);
+    ZonedDateTime dateTime = ZonedDateTime.now().plusDays(6);
     String commitTime2 = "301";
     HiveTestUtil.addCOWPartitions(1, false, true, dateTime, commitTime2);
     //HiveTestUtil.createCommitFileWithSchema(commitMetadata, "400", false); // create another empty commit

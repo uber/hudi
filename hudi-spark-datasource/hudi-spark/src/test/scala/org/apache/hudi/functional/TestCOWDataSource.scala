@@ -18,7 +18,6 @@
 package org.apache.hudi.functional
 
 import java.sql.{Date, Timestamp}
-
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import org.apache.hudi.common.config.HoodieMetadataConfig
@@ -36,12 +35,13 @@ import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWr
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, concat, lit, udf}
 import org.apache.spark.sql.types._
-import org.joda.time.DateTime
-import org.joda.time.format.DateTimeFormat
 import org.junit.jupiter.api.Assertions.{assertEquals, assertTrue, fail}
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+
+import java.time.format.DateTimeFormatter
+import java.time.{Instant, ZoneId, ZonedDateTime}
 
 
 /**
@@ -541,7 +541,8 @@ class TestCOWDataSource extends HoodieClientTestBase {
     recordsReadDF = spark.read.format("org.apache.hudi")
       .load(basePath + "/*/*")
 
-    val udf_date_format = udf((data: Long) => new DateTime(data).toString(DateTimeFormat.forPattern("yyyyMMdd")))
+    val udf_date_format = udf((data: Long) => ZonedDateTime.ofInstant(Instant.ofEpochMilli(1111), ZoneId.systemDefault())
+      .format(DateTimeFormatter.ofPattern("yyyyMMdd")))
     assertTrue(recordsReadDF.filter(col("_hoodie_partition_path") =!= udf_date_format(col("current_ts"))).count() == 0)
 
     // Mixed fieldType
@@ -623,7 +624,8 @@ class TestCOWDataSource extends HoodieClientTestBase {
 
     val recordsReadDF = spark.read.format("org.apache.hudi")
       .load(basePath + "/*/*")
-    val udf_date_format = udf((data: Long) => new DateTime(data).toString(DateTimeFormat.forPattern("yyyyMMdd")))
+    val udf_date_format = udf((data: Long) => ZonedDateTime.ofInstant(Instant.ofEpochMilli(1111), ZoneId.systemDefault())
+      .format(DateTimeFormatter.ofPattern("yyyyMMdd")))
     assertTrue(recordsReadDF.filter(col("_hoodie_partition_path") =!= udf_date_format(col("current_ts"))).count() == 0)
   }
 
