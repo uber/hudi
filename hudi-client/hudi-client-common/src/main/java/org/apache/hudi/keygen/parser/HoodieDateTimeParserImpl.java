@@ -48,7 +48,7 @@ public class HoodieDateTimeParserImpl extends AbstractHoodieDateTimeParser {
 
     DateTimeFormatterBuilder formatterBuilder = new DateTimeFormatterBuilder();
     Arrays.stream(this.configInputDateFormatList.split(super.configInputDateFormatDelimiter))
-            .map(String::trim).map(DateTimeFormatter::ofPattern).forEach(formatterBuilder::append);
+            .map(String::trim).map(DateTimeFormatter::ofPattern).forEach(formatterBuilder::appendOptional);
     DateTimeFormatter formatter = formatterBuilder.parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
             .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
             .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
