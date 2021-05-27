@@ -208,7 +208,8 @@ public class TimestampBasedAvroKeyGenerator extends SimpleAvroKeyGenerator {
       throw new HoodieNotSupportedException(
           "Unexpected type for partition field: " + partitionVal.getClass().getName());
     }
-    ZonedDateTime timestamp =  ZonedDateTime.ofInstant(Instant.ofEpochMilli(timeMs), outputDateTimeZone);
+    ZoneId zoneId = outputDateTimeZone == null ? ZoneId.systemDefault() : outputDateTimeZone;
+    ZonedDateTime timestamp = ZonedDateTime.ofInstant(Instant.ofEpochMilli(timeMs), zoneId);
     String partitionPath = timestamp.format(partitionFormatter);
     if (encodePartitionPath) {
       partitionPath = PartitionPathEncodeUtils.escapePathName(partitionPath);

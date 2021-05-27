@@ -26,6 +26,7 @@ import org.apache.hudi.keygen.KeyGenUtils;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.Arrays;
 import java.util.Collections;
 
@@ -48,9 +49,14 @@ public class HoodieDateTimeParserImpl extends AbstractHoodieDateTimeParser {
     DateTimeFormatterBuilder formatterBuilder = new DateTimeFormatterBuilder();
     Arrays.stream(this.configInputDateFormatList.split(super.configInputDateFormatDelimiter))
             .map(String::trim).map(DateTimeFormatter::ofPattern).forEach(formatterBuilder::append);
-    DateTimeFormatter formatter = formatterBuilder.toFormatter();
+    DateTimeFormatter formatter = formatterBuilder.parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
+            .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
+            .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+            .toFormatter();
     if (this.inputDateTimeZone != null) {
       formatter = formatter.withZone(this.inputDateTimeZone);
+    } else {
+      formatter = formatter.withZone(ZoneId.systemDefault());
     }
     return formatter;
   }
