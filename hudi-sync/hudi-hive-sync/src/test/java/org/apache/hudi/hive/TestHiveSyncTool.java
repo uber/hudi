@@ -734,4 +734,33 @@ public class TestHiveSyncTool {
     hiveClient.updateHiveSQL(dropTableSql);
   }
 
+  @ParameterizedTest
+  @MethodSource("useJdbc")
+  public void testSyncWithoutDiffs(boolean useJdbc) throws Exception {
+    HiveTestUtil.hiveSyncConfig.useJdbc = useJdbc;
+    String tableName = HiveTestUtil.hiveSyncConfig.tableName + HiveSyncTool.SUFFIX_SNAPSHOT_TABLE;
+
+    String commitTime0 = "100";
+    String commitTime1 = "101";
+    String commitTime2 = "102";
+    HiveTestUtil.createMORTable(commitTime0, commitTime1, 2, true, true);
+
+    HoodieHiveClient hiveClient =
+        new HoodieHiveClient(HiveTestUtil.hiveSyncConfig, HiveTestUtil.getHiveConf(), HiveTestUtil.fileSystem);
+
+    HiveSyncTool tool = new HiveSyncTool(HiveTestUtil.hiveSyncConfig, HiveTestUtil.getHiveConf(), HiveTestUtil.fileSystem);
+    tool.syncHoodieTable();
+
+    assertTrue(hiveClient.doesTableExist(tableName));
+    assertEquals(commitTime1, hiveClient.getLastCommitTimeSynced(tableName).get());
+
+    HiveTestUtil.addMORPartitions(0, true, true, true, DateTime.now().plusDays(2), commitTime1, commitTime2);
+
+    tool = new HiveSyncTool(HiveTestUtil.hiveSyncConfig, HiveTestUtil.getHiveConf(), HiveTestUtil.fileSystem);
+    tool.syncHoodieTable();
+    hiveClient =
+            new HoodieHiveClient(HiveTestUtil.hiveSyncConfig, HiveTestUtil.getHiveConf(), HiveTestUtil.fileSystem);
+    assertEquals(commitTime1, hiveClient.getLastCommitTimeSynced(tableName).get());
+  }
+
 }
