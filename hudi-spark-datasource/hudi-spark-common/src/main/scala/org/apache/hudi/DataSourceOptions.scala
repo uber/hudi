@@ -333,6 +333,14 @@ object DataSourceWriteOptions {
   val META_SYNC_CLIENT_TOOL_CLASS = "hoodie.meta.sync.client.tool.class"
   val DEFAULT_META_SYNC_CLIENT_TOOL_CLASS = classOf[HiveSyncTool].getName
 
+  /**
+   * When a new batch of write has records with old schema, but latest table schema got evolved, this config will
+   * upgrade the records to leverage latest table schema(default vals will be injected to missing fields).
+   * If not, the batch would fail.
+   */
+  val HANDLE_SCHEMA_MISMATCH_FOR_INPUT_BATCH_OPT_KEY = "hoodie.datasource.write.handle.schema.mismatch.for.input.batch"
+  val DEFAULT_HANDLE_SCHEMA_MISMATCH_FOR_INPUT_BATCH_OPT_VAL = "false"
+
   // HIVE SYNC SPECIFIC CONFIGS
   //NOTE: DO NOT USE uppercase for the keys as they are internally lower-cased. Using upper-cases causes
   // unexpected issues with config getting reset
