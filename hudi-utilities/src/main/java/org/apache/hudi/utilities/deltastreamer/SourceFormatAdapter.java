@@ -118,4 +118,11 @@ public final class SourceFormatAdapter {
         throw new IllegalArgumentException("Unknown source type (" + source.getSourceType() + ")");
     }
   }
+
+  /**
+   * Signal source after successfully commit a input batch.
+   */
+  public void postCommit() {
+    source.postCommit();
+  }
 }

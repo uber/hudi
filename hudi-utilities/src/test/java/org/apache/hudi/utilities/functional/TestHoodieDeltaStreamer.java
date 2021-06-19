@@ -233,6 +233,7 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     invalidHiveSyncProps.setProperty("hoodie.deltastreamer.ingestion.uber_db.dummy_table_uber.configFile", dfsBasePath + "/config/invalid_hive_sync_uber_config.properties");
     UtilitiesTestBase.Helpers.savePropsToDFS(invalidHiveSyncProps, dfs, dfsBasePath + "/" + PROPS_INVALID_HIVE_SYNC_TEST_SOURCE1);
 
+//<<<<<<< HEAD
     prepareParquetDFSFiles(PARQUET_NUM_RECORDS, PARQUET_SOURCE_ROOT);
   }
 
@@ -241,6 +242,9 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     if (testUtils != null) {
       testUtils.teardown();
     }
+//=======
+  //  prepareParquetDFSFiles(PARQUET_SOURCE_ROOT + "/1.parquet", PARQUET_NUM_RECORDS);
+//>>>>>>> 9dd367db ([HUDI-1348] Provide option to clean up DFS sources)
   }
 
   private static void populateInvalidTableConfigFilePathProps(TypedProperties props) {
@@ -1269,6 +1273,7 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     assertEquals(1000, c);
   }
 
+//<<<<<<< HEAD
   private static void prepareParquetDFSFiles(int numRecords) throws IOException {
     prepareParquetDFSFiles(numRecords, PARQUET_SOURCE_ROOT);
   }
@@ -1280,6 +1285,9 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
   protected static void prepareParquetDFSFiles(int numRecords, String baseParquetPath, String fileName, boolean useCustomSchema,
       String schemaStr, Schema schema) throws IOException {
     String path = baseParquetPath + "/" + fileName;
+//=======
+  //private static void prepareParquetDFSFiles(String path, int numRecords) throws IOException {
+//>>>>>>> 9dd367db ([HUDI-1348] Provide option to clean up DFS sources)
     HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     if (useCustomSchema) {
       Helpers.saveParquetToDFS(Helpers.toGenericRecords(
@@ -1303,13 +1311,17 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     testUtils.sendMessages(topicName, Helpers.jsonifyRecords(dataGenerator.generateInsertsAsPerSchema("000", numRecords, HoodieTestDataGenerator.TRIP_SCHEMA)));
   }
 
+//<<<<<<< HEAD
   private void prepareParquetDFSSource(boolean useSchemaProvider, boolean hasTransformer) throws IOException {
     prepareParquetDFSSource(useSchemaProvider, hasTransformer, "source.avsc", "target.avsc",
-        PROPS_FILENAME_TEST_PARQUET, PARQUET_SOURCE_ROOT, false);
+        PROPS_FILENAME_TEST_PARQUET, PARQUET_SOURCE_ROOT, false, null);
   }
 
   private void prepareParquetDFSSource(boolean useSchemaProvider, boolean hasTransformer, String sourceSchemaFile, String targetSchemaFile,
-      String propsFileName, String parquetSourceRoot, boolean addCommonProps) throws IOException {
+      String propsFileName, String parquetSourceRoot, boolean addCommonProps, TypedProperties props) throws IOException {
+//=======
+  //private void prepareParquetDFSSource(boolean useSchemaProvider, boolean hasTransformer, TypedProperties props) throws IOException {
+//>>>>>>> 9dd367db ([HUDI-1348] Provide option to clean up DFS sources)
     // Properties used for testing delta-streamer with Parquet source
     TypedProperties parquetProps = new TypedProperties();
 
@@ -1327,12 +1339,23 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
         parquetProps.setProperty("hoodie.deltastreamer.schemaprovider.target.schema.file", dfsBasePath + "/" + targetSchemaFile);
       }
     }
+//<<<<<<< HEAD
     parquetProps.setProperty("hoodie.deltastreamer.source.dfs.root", parquetSourceRoot);
     UtilitiesTestBase.Helpers.savePropsToDFS(parquetProps, dfs, dfsBasePath + "/" + propsFileName);
+//=======
+    //parquetProps.setProperty("hoodie.deltastreamer.source.dfs.root", PARQUET_SOURCE_ROOT);
+    if (null != props) {
+      for (String key: props.stringPropertyNames()) {
+        parquetProps.setProperty(key, props.getString(key));
+      }
+    }
+
+    //UtilitiesTestBase.Helpers.savePropsToDFS(parquetProps, dfs, dfsBasePath + "/" + PROPS_FILENAME_TEST_PARQUET);
+//>>>>>>> 9dd367db ([HUDI-1348] Provide option to clean up DFS sources)
   }
 
   private void testParquetDFSSource(boolean useSchemaProvider, List<String> transformerClassNames) throws Exception {
-    prepareParquetDFSSource(useSchemaProvider, transformerClassNames != null);
+    prepareParquetDFSSource(useSchemaProvider, transformerClassNames != null, null);
     String tableBasePath = dfsBasePath + "/test_parquet_table" + testNum;
     HoodieDeltaStreamer deltaStreamer = new HoodieDeltaStreamer(
         TestHelpers.makeConfig(tableBasePath, WriteOperationType.INSERT, ParquetDFSSource.class.getName(),
@@ -1372,7 +1395,7 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     prepareParquetDFSFiles(parquetRecords, PARQUET_SOURCE_ROOT, FIRST_PARQUET_FILE_NAME, true, HoodieTestDataGenerator.TRIP_SCHEMA, HoodieTestDataGenerator.AVRO_TRIP_SCHEMA);
 
     prepareParquetDFSSource(true, false,"source_uber.avsc", "target_uber.avsc", PROPS_FILENAME_TEST_PARQUET,
-        PARQUET_SOURCE_ROOT, false);
+        PARQUET_SOURCE_ROOT, false, null);
     // delta streamer w/ parquest source
     String tableBasePath = dfsBasePath + "/test_dfs_to_kakfa" + testNum;
     HoodieDeltaStreamer deltaStreamer = new HoodieDeltaStreamer(
@@ -1593,6 +1616,72 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     // In this case, the source and target schema come from the Avro schema files
     testCsvDFSSource(false, '\t', true, Collections.singletonList(TripsWithDistanceTransformer.class.getName()));
   }
+
+  @Test
+  public void testDFSSourceDeleteFilesAfterCommit() throws Exception {
+    TypedProperties props = new TypedProperties();
+    props.setProperty("hoodie.deltastreamer.source.dfs.clean.mode", "delete");
+    testDFSSourceCleanUp(props);
+  }
+
+  @Test
+  public void testDFSSourceArchiveFilesAfterCommit() throws Exception {
+    TypedProperties props = new TypedProperties();
+    props.setProperty("hoodie.deltastreamer.source.dfs.clean.mode", "archive");
+    final String archivePath = dfsBasePath + "/archive";
+    dfs.mkdirs(new Path(archivePath));
+    props.setProperty("hoodie.deltastreamer.source.dfs.clean.archiveDir", archivePath);
+    assertEquals(0, Helpers.listAllFiles(archivePath).size());
+    testDFSSourceCleanUp(props);
+    // archive dir should contain source files
+    assertEquals(1, Helpers.listAllFiles(archivePath).size());
+  }
+
+  private void testDFSSourceCleanUp(TypedProperties props) throws Exception {
+    // since each source cleanup test will modify source, we need to set different dfs.root each test
+    final String dfsRoot = dfsBasePath + "/test_dfs_cleanup_source" + testNum;
+    dfs.mkdirs(new Path(dfsRoot));
+    prepareParquetDFSFiles(dfsRoot + "/1.parquet", PARQUET_NUM_RECORDS);
+    props.setProperty("hoodie.deltastreamer.source.dfs.root", dfsRoot);
+    prepareParquetDFSSource(false, false, props);
+
+    String tableBasePath = dfsBasePath + "/test_dfs_cleanup_output" + testNum;
+    HoodieDeltaStreamer deltaStreamer = new HoodieDeltaStreamer(
+        TestHelpers.makeConfig(tableBasePath, WriteOperationType.INSERT, ParquetDFSSource.class.getName(),
+          null, PROPS_FILENAME_TEST_PARQUET, false,
+          false, 100000, false, null, null, "timestamp"),
+          jsc);
+
+    assertEquals(1, Helpers.listAllFiles(PARQUET_SOURCE_ROOT).size());
+    deltaStreamer.sync();
+    TestHelpers.assertRecordCount(PARQUET_NUM_RECORDS, tableBasePath + "/*/*.parquet", sqlContext);
+    // source files should be removed
+    assertEquals(0, Helpers.listAllFiles(dfsRoot).size());
+    testNum++;
+  }
+
+  @Test
+  public void testDFSSourceArchiveFilesInvalidArchiveDir() throws Exception {
+    Exception e = assertThrows(IOException.class, () -> {
+      TypedProperties props = new TypedProperties();
+      props.setProperty("hoodie.deltastreamer.source.dfs.clean.mode", "archive");
+      final String rootPath = dfsBasePath + "/test_dfs_cleanup" + testNum;
+      props.setProperty("hoodie.deltastreamer.source.dfs.clean.archiveDir", rootPath + "/archive");
+      props.setProperty("hoodie.deltastreamer.source.dfs.root", rootPath);
+      prepareParquetDFSSource(false, false, props);
+
+      String tableBasePath = dfsBasePath + "/test_dfs_cleanup_output" + testNum;
+      HoodieDeltaStreamer deltaStreamer = new HoodieDeltaStreamer(
+          TestHelpers.makeConfig(tableBasePath, WriteOperationType.INSERT, ParquetDFSSource.class.getName(),
+          null, PROPS_FILENAME_TEST_PARQUET, false,
+          false, 100000, false, null, null, "timestamp"),
+          jsc);
+    }, "should throw error when archiveDir is child of dfs.root");
+    assertEquals("hoodie.deltastreamer.source.dfs.clean.archiveDir must not be child of "
+        + "hoodie.deltastreamer.source.dfs.root", Helpers.getRootCause(e).getMessage());
+    testNum++;
+  }
+
 
   /**
    * UDF to calculate Haversine distance.
