@@ -438,13 +438,6 @@
               <goal>compile</goal>
             </goals>
           </execution>
-          <execution>
-            <id>scala-test-compile</id>
-            <phase>process-test-resources</phase>
-            <goals>
-              <goal>testCompile</goal>
-            </goals>
-          </execution>
         </executions>
       </plugin>
       <plugin>

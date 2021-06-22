@@ -45,7 +45,6 @@ class SparkBulkInsertNode(config1: Config) extends DagNode[RDD[WriteStatus]] {
    */
   override def execute(context: ExecutionContext, curItrCount: Int): Unit = {
     if (!config.isDisableGenerate) {
-      //println("Generating input data for node {}", this.getName)
       context.getDeltaGenerator().writeRecords(context.getDeltaGenerator().generateInserts(config)).count()
     }
     val inputDF = AvroConversionUtils.createDataFrame(context.getWriterContext.getHoodieTestSuiteWriter.getNextBatch,
@@ -57,7 +56,7 @@ class SparkBulkInsertNode(config1: Config) extends DagNode[RDD[WriteStatus]] {
       .option(DataSourceWriteOptions.TABLE_NAME_OPT_KEY, context.getHoodieTestSuiteWriter.getCfg.targetTableName)
       .option(DataSourceWriteOptions.TABLE_TYPE_OPT_KEY, context.getHoodieTestSuiteWriter.getCfg.tableType)
       .option(DataSourceWriteOptions.OPERATION_OPT_KEY, DataSourceWriteOptions.BULK_INSERT_OPERATION_OPT_VAL)
-      .option(DataSourceWriteOptions.ENABLE_ROW_WRITER_OPT_KEY, String.valueOf(config.doEnableRowWriting()))
+      .option(DataSourceWriteOptions.ENABLE_ROW_WRITER_OPT_KEY, String.valueOf(config.enableRowWriting()))
       .option(DataSourceWriteOptions.COMMIT_METADATA_KEYPREFIX_OPT_KEY, "deltastreamer.checkpoint.key")
       .option("deltastreamer.checkpoint.key", context.getWriterContext.getHoodieTestSuiteWriter.getLastCheckpoint.orElse(""))
       .option(HoodieWriteConfig.TABLE_NAME, context.getHoodieTestSuiteWriter.getCfg.targetTableName)
