@@ -195,14 +195,13 @@ public class SparkRDDWriteClient<T extends HoodieRecordPayload> extends
    * @param instantTime Instant time of the commit
    * @return JavaRDD[WriteStatus] - RDD of WriteStatus to inspect errors and counts
    */
-  public JavaRDD<WriteStatus> insertOverwrite(JavaRDD<HoodieRecord<T>> records, String instantTime) {
+  public HoodieWriteResult insertOverwrite(JavaRDD<HoodieRecord<T>> records, final String instantTime) {
     HoodieTable table = getTableAndInitCtx(WriteOperationType.INSERT_OVERWRITE, instantTime);
     table.validateInsertSchema();
     preWrite(instantTime, WriteOperationType.INSERT_OVERWRITE, table.getMetaClient());
     HoodieWriteMetadata result = table.insertOverwrite(context, instantTime, records);
-    HoodieWriteResult writeResult = new HoodieWriteResult(postWrite(result, instantTime, table),
+    return new HoodieWriteResult(postWrite(result, instantTime, table),
             result.getPartitionToReplaceFileIds());
-    return writeResult.getWriteStatuses();
   }
 
 

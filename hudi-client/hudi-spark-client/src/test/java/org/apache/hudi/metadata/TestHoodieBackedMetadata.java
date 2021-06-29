@@ -20,6 +20,7 @@ package org.apache.hudi.metadata;
 
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hudi.client.HoodieWriteResult;
 import org.apache.hudi.client.SparkRDDWriteClient;
 import org.apache.hudi.client.WriteStatus;
 import org.apache.hudi.client.common.HoodieSparkEngineContext;
@@ -555,7 +556,8 @@ public class TestHoodieBackedMetadata extends HoodieClientTestHarness {
       newCommitTime = HoodieActiveTimeline.createNewInstantTime();
       client.startCommitWithTime(newCommitTime, HoodieTimeline.REPLACE_COMMIT_ACTION);
       records = dataGen.generateInserts(newCommitTime, 5);
-      writeStatuses = client.insertOverwrite(jsc.parallelize(records, 1), newCommitTime).collect();
+      HoodieWriteResult replaceResult = client.insertOverwrite(jsc.parallelize(records, 1), newCommitTime);
+      writeStatuses = replaceResult.getWriteStatuses().collect();
       assertNoWriteErrors(writeStatuses);
       assertTrue(metadata(client).isInSync());
     }

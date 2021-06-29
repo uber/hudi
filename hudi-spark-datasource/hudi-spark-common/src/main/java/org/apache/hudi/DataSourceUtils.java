@@ -173,7 +173,7 @@ public class DataSourceUtils {
       case UPSERT:
         return new HoodieWriteResult(client.upsert(hoodieRecords, instantTime));
       case INSERT_OVERWRITE:
-        return new HoodieWriteResult(client.insertOverwrite(hoodieRecords, instantTime));
+        return client.insertOverwrite(hoodieRecords, instantTime);
       case INSERT_OVERWRITE_TABLE:
         return client.insertOverwriteTable(hoodieRecords, instantTime);
       default:

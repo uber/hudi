@@ -1242,11 +1242,11 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
     List<HoodieRecord> insertsAndUpdates2 = new ArrayList<>();
     insertsAndUpdates2.addAll(inserts2);
     JavaRDD<HoodieRecord> insertAndUpdatesRDD2 = jsc.parallelize(insertsAndUpdates2, 2);
-    JavaRDD<WriteStatus> statusJavaRDD = client.insertOverwrite(insertAndUpdatesRDD2, commitTime2);
-    statuses = statusJavaRDD.collect();
+    HoodieWriteResult writeResult = client.insertOverwrite(insertAndUpdatesRDD2, commitTime2);
+    statuses = writeResult.getWriteStatuses().collect();
     assertNoWriteErrors(statuses);
 
-    assertEquals(batch1Buckets, getFileIdsFromWriteStatus(statuses));
+    assertEquals(batch1Buckets, new HashSet<>(writeResult.getPartitionToReplaceFileIds().get(testPartitionPath)));
     verifyRecordsWritten(commitTime2, inserts2, statuses);
   }
 

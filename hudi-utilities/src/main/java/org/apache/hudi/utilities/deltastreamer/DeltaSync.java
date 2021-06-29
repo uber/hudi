@@ -450,7 +450,7 @@ public class DeltaSync implements Serializable {
         writeStatusRDD = writeClient.bulkInsert(records, instantTime);
         break;
       case INSERT_OVERWRITE:
-        writeStatusRDD = writeClient.insertOverwrite(records, instantTime);
+        writeStatusRDD = writeClient.insertOverwrite(records, instantTime).getWriteStatuses();
         break;
       default:
         throw new HoodieDeltaStreamerException("Unknown operation : " + cfg.operation);
