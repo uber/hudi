@@ -44,6 +44,11 @@ public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
     return deltaSyncService.get().getDeltaSync().syncOnce().getRight();
   }
 
+  public JavaRDD<WriteStatus> insertOverwrite(WriteOperationType operation) throws Exception {
+    cfg.operation = operation;
+    return deltaSyncService.get().getDeltaSync().syncOnce().getRight();
+  }
+
   public JavaRDD<WriteStatus> insert() throws Exception {
     return upsert(WriteOperationType.INSERT);
   }
@@ -51,6 +56,11 @@ public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
   public JavaRDD<WriteStatus> bulkInsert() throws
       Exception {
     return upsert(WriteOperationType.BULK_INSERT);
+  }
+
+  public JavaRDD<WriteStatus> insertOverwrite() throws
+          Exception {
+    return insertOverwrite(WriteOperationType.INSERT_OVERWRITE);
   }
 
   public void scheduleCompact() throws Exception {
