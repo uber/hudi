@@ -143,7 +143,6 @@ object HoodieSparkSqlWriter {
         return (success, commitTime, common.util.Option.empty(), hoodieWriteClient.orNull, tableConfig)
       }
       // scalastyle:on
-
       val (writeResult, writeClient: SparkRDDWriteClient[HoodieRecordPayload[Nothing]]) =
         if (operation != WriteOperationType.DELETE) {
           // register classes & schemas
