@@ -21,11 +21,12 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hudi.DataSourceReadOptions.{QUERY_TYPE_OPT_KEY, QUERY_TYPE_SNAPSHOT_OPT_VAL}
 import org.apache.hudi.client.common.HoodieSparkEngineContext
-import org.apache.hudi.common.config.{HoodieMetadataConfig, SerializableConfiguration}
-import org.apache.hudi.common.engine.HoodieLocalEngineContext
+import org.apache.hudi.common.config.HoodieMetadataConfig
 import org.apache.hudi.common.fs.FSUtils
-import org.apache.hudi.common.model.HoodieBaseFile
+import org.apache.hudi.common.model.{FileSlice, HoodieBaseFile, HoodieLogFile}
+import org.apache.hudi.common.model.HoodieTableType.MERGE_ON_READ
 import org.apache.hudi.common.table.{HoodieTableMetaClient, TableSchemaResolver}
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView
 import org.apache.hudi.config.HoodieWriteConfig
@@ -76,6 +77,11 @@ case class HoodieFileIndex(
   private val basePath = metaClient.getBasePath
 
   @transient private val queryPath = new Path(options.getOrElse("path", "'path' option required"))
+
+  private val queryType = options(QUERY_TYPE_OPT_KEY.key)
+
+  private val tableType = metaClient.getTableType
+
   /**
    * Get the schema of the table.
    */
@@ -107,9 +113,8 @@ case class HoodieFileIndex(
   }
 
   @transient @volatile private var fileSystemView: HoodieTableFileSystemView = _
-  @transient @volatile private var cachedAllInputFiles: Array[HoodieBaseFile] = _
+  @transient @volatile private var cachedAllInputFileSlices: Map[PartitionRowPath, Seq[FileSlice]] = _
   @transient @volatile private var cachedFileSize: Long = 0L
-  @transient @volatile private var cachedAllPartitionPaths: Seq[PartitionRowPath] = _
 
   @volatile private var queryAsNonePartitionedTable: Boolean = _
 
@@ -117,24 +122,58 @@ case class HoodieFileIndex(
 
   override def rootPaths: Seq[Path] = queryPath :: Nil
 
+  /**
+   * Invoked by Spark to fetch list of latest base files per partition.
+   *
+   * @param partitionFilters partition column filters
+   * @param dataFilters data columns filters
+   * @return list of PartitionDirectory containing partition to base files mapping
+   */
   override def listFiles(partitionFilters: Seq[Expression],
                          dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     if (queryAsNonePartitionedTable) { // Read as Non-Partitioned table.
       Seq(PartitionDirectory(InternalRow.empty, allFiles))
     } else {
       // Prune the partition path by the partition filters
-      val prunedPartitions = prunePartition(cachedAllPartitionPaths, partitionFilters)
+      val prunedPartitions = prunePartition(cachedAllInputFileSlices.keys.toSeq, partitionFilters)
       prunedPartitions.map { partition =>
-        val fileStatues = fileSystemView.getLatestBaseFiles(partition.partitionPath).iterator()
-          .asScala.toSeq
-          .map(_.getFileStatus)
-        PartitionDirectory(partition.values, fileStatues)
+        val baseFileStatuses = cachedAllInputFileSlices(partition).map(fileSlice => {
+          if (fileSlice.getBaseFile.isPresent) {
+            fileSlice.getBaseFile.get().getFileStatus
+          } else {
+            null
+          }
+        }).filterNot(_ == null)
+
+        PartitionDirectory(partition.values, baseFileStatuses)
       }
     }
   }
 
+  /**
+   * Fetch list of latest base files and log files per partition.
+   *
+   * @param partitionFilters partition column filters
+   * @param dataFilters data column filters
+   * @return mapping from string partition paths to its base/log files
+   */
+  def listFileSlices(partitionFilters: Seq[Expression],
+                     dataFilters: Seq[Expression]): Map[String, Seq[FileSlice]] = {
+    if (queryAsNonePartitionedTable) {
+      // Read as Non-Partitioned table.
+      cachedAllInputFileSlices.map(entry => (entry._1.partitionPath, entry._2))
+    } else {
+      // Prune the partition path by the partition filters
+      val prunedPartitions = prunePartition(cachedAllInputFileSlices.keys.toSeq, partitionFilters)
+      prunedPartitions.map(partition => {
+        (partition.partitionPath, cachedAllInputFileSlices(partition))
+      }).toMap
+    }
+  }
+
   override def inputFiles: Array[String] = {
-    cachedAllInputFiles.map(_.getFileStatus.getPath.toString)
+    val fileStatusList = allFiles
+    fileStatusList.map(_.getPath.toString).toArray
   }
 
   override def refresh(): Unit = {
@@ -151,13 +190,36 @@ case class HoodieFileIndex(
     metaClient.reloadActiveTimeline()
     val activeInstants = metaClient.getActiveTimeline.getCommitsTimeline.filterCompletedInstants
     fileSystemView = new HoodieTableFileSystemView(metaClient, activeInstants, allFiles)
-    cachedAllInputFiles = fileSystemView.getLatestBaseFiles.iterator().asScala.toArray
-    cachedAllPartitionPaths = partitionFiles.keys.toSeq
-    cachedFileSize = cachedAllInputFiles.map(_.getFileLen).sum
+
+    (tableType, queryType) match {
+      case (MERGE_ON_READ, QUERY_TYPE_SNAPSHOT_OPT_VAL) =>
+        // Fetch and store latest base and log files, and their sizes
+        cachedAllInputFileSlices = partitionFiles.map(p => {
+          val latestSlices = if (activeInstants.lastInstant().isPresent) {
+           fileSystemView.getLatestMergedFileSlicesBeforeOrOn(p._1.partitionPath,
+             activeInstants.lastInstant().get().getTimestamp).iterator().asScala.toSeq
+          } else {
+            Seq()
+          }
+          (p._1, latestSlices)
+        })
+        cachedFileSize = cachedAllInputFileSlices.values.flatten.map(fileSlice => {
+          if (fileSlice.getBaseFile.isPresent) {
+            fileSlice.getBaseFile.get().getFileLen + fileSlice.getLogFiles.iterator().asScala.map(_.getFileSize).sum
+          } else {
+            fileSlice.getLogFiles.iterator().asScala.map(_.getFileSize).sum
+          }
+        }).sum
+      case (_, _) =>
+        // Fetch and store latest base files and its sizes
+        cachedAllInputFileSlices = partitionFiles.map(p => {
+          (p._1, fileSystemView.getLatestFileSlices(p._1.partitionPath).iterator().asScala.toSeq)
+        })
+        cachedFileSize = cachedAllInputFileSlices.values.flatten.map(_.getBaseFile.get().getFileLen).sum
+    }
 
     // If the partition value contains InternalRow.empty, we query it as a non-partitioned table.
-    queryAsNonePartitionedTable = cachedAllPartitionPaths
-      .exists(p => p.values == InternalRow.empty)
+    queryAsNonePartitionedTable = partitionFiles.keys.exists(p => p.values == InternalRow.empty)
     val flushSpend = System.currentTimeMillis() - startTime
     logInfo(s"Refresh for table ${metaClient.getTableConfig.getTableName}," +
       s" spend: $flushSpend ms")
@@ -186,7 +248,19 @@ case class HoodieFileIndex(
     StructType(schema.fields.filterNot(f => partitionColumns.contains(f.name)))
   }
 
-  def allFiles: Seq[FileStatus] = cachedAllInputFiles.map(_.getFileStatus)
+  def allFiles: Seq[FileStatus] = {
+    cachedAllInputFileSlices.values.flatten.flatMap(fileSlice => {
+      val logFiles = fileSlice.getLogFiles
+        .sorted(HoodieLogFile.getLogFileComparator).iterator().asScala
+        .map(_.getFileStatus)
+
+      if (fileSlice.getBaseFile.isPresent) {
+        Iterator(fileSlice.getBaseFile.get().getFileStatus) ++ logFiles
+      } else {
+        logFiles
+      }
+    }).toSeq
+  }
 
   /**
    * Prune the partition by the filter.This implementation is fork from
@@ -227,7 +301,16 @@ case class HoodieFileIndex(
    */
   private def loadPartitionPathFiles(): Map[PartitionRowPath, Array[FileStatus]] = {
     val sparkEngine = new HoodieSparkEngineContext(new JavaSparkContext(spark.sparkContext))
+    val sqlConf = spark.sessionState.conf
     val properties = new Properties()
+    // To support metadata listing via Spark SQL we allow users to pass the config via SQL Conf in spark session. Users
+    // would be able to run SET hoodie.metadata.enable=true in the spark sql session to enable metadata listing.
+    properties.put(HoodieMetadataConfig.METADATA_ENABLE_PROP.key,
+      sqlConf.getConfString(HoodieMetadataConfig.METADATA_ENABLE_PROP.key,
+        HoodieMetadataConfig.DEFAULT_METADATA_ENABLE_FOR_READERS.toString))
+    properties.put(HoodieMetadataConfig.METADATA_VALIDATE_PROP.key,
+      sqlConf.getConfString(HoodieMetadataConfig.METADATA_VALIDATE_PROP.key,
+        HoodieMetadataConfig.METADATA_VALIDATE_PROP.defaultValue().toString))
     properties.putAll(options.asJava)
     val metadataConfig = HoodieMetadataConfig.newBuilder.fromProperties(properties).build()
 
@@ -241,7 +324,6 @@ case class HoodieFileIndex(
       .withPath(basePath).withProperties(properties).build()
     val maxListParallelism = writeConfig.getFileListingParallelism
 
-    val serializableConf = new SerializableConfiguration(spark.sessionState.newHadoopConf())
     val partitionSchema = _partitionSchemaFromProperties
     val timeZoneId = CaseInsensitiveMap(options)
       .get(DateTimeUtils.TIMEZONE_OPTION)
@@ -321,28 +403,25 @@ case class HoodieFileIndex(
         case None => pathToFetch.append(partitionRowPath)
       }
     }
-    // Fetch the rest from the file system.
-    val fetchedPartition2Files =
+
+    val fetchedPartitionToFiles =
       if (pathToFetch.nonEmpty) {
-        spark.sparkContext.parallelize(pathToFetch, Math.min(pathToFetch.size, maxListParallelism))
-          .map { partitionRowPath =>
-            // Here we use a LocalEngineContext to get the files in the partition.
-            // We can do this because the TableMetadata.getAllFilesInPartition only rely on the
-            // hadoopConf of the EngineContext.
-            val engineContext = new HoodieLocalEngineContext(serializableConf.get())
-            val filesInPartition = FSUtils.getFilesInPartition(engineContext, metadataConfig,
-              basePath, partitionRowPath.fullPartitionPath(basePath))
-            (partitionRowPath, filesInPartition)
-          }.collect().map(f => f._1 -> f._2).toMap
+        val fullPartitionPathsToFetch = pathToFetch.map(p => (p, p.fullPartitionPath(basePath).toString)).toMap
+        val partitionToFilesMap = FSUtils.getFilesInPartitions(sparkEngine, metadataConfig, basePath,
+          fullPartitionPathsToFetch.values.toArray)
+        fullPartitionPathsToFetch.map(p => {
+          (p._1, partitionToFilesMap.get(p._2))
+        })
       } else {
         Map.empty[PartitionRowPath, Array[FileStatus]]
       }
+
     // Update the fileStatusCache
-    fetchedPartition2Files.foreach {
+    fetchedPartitionToFiles.foreach {
       case (partitionRowPath, filesInPartition) =>
         fileStatusCache.putLeafFiles(partitionRowPath.fullPartitionPath(basePath), filesInPartition)
     }
-    cachePartitionToFiles.toMap ++ fetchedPartition2Files
+    cachePartitionToFiles.toMap ++ fetchedPartitionToFiles
   }
 
   /**
