@@ -25,12 +25,13 @@ import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.deltastreamer.DeltaSync;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer;
 import org.apache.hudi.utilities.schema.SchemaProvider;
-
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 
 /**
- * Extends the {@link HoodieDeltaStreamer} to expose certain operations helpful in running the Test Suite. This is done to achieve 2 things 1) Leverage some components of {@link HoodieDeltaStreamer}
+ * Extends the {@link HoodieDeltaStreamer} to expose certain operations helpful in running the Test Suite.
+ * This is done to achieve 2 things
+ * 1) Leverage some components of {@link HoodieDeltaStreamer}
  * 2) Piggyback on the suite to test {@link HoodieDeltaStreamer}
  */
 public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
@@ -40,11 +41,6 @@ public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
   }
 
   public JavaRDD<WriteStatus> upsert(WriteOperationType operation) throws Exception {
-    cfg.operation = operation;
-    return deltaSyncService.get().getDeltaSync().syncOnce().getRight();
-  }
-
-  public JavaRDD<WriteStatus> insertOverwrite(WriteOperationType operation) throws Exception {
     cfg.operation = operation;
     return deltaSyncService.get().getDeltaSync().syncOnce().getRight();
   }
@@ -63,14 +59,32 @@ public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
     return insertOverwrite(WriteOperationType.INSERT_OVERWRITE);
   }
 
+  public JavaRDD<WriteStatus> insertOverwrite(WriteOperationType operation) throws Exception {
+    cfg.operation = operation;
+    return deltaSyncService.get().getDeltaSync().syncOnce().getRight();
+  }
+
+  public JavaRDD<WriteStatus> insertOverwriteTable() throws
+          Exception {
+    return insertOverwriteTable(WriteOperationType.INSERT_OVERWRITE_TABLE);
+  }
+
+  public JavaRDD<WriteStatus> insertOverwriteTable(WriteOperationType operation) throws
+          Exception {
+    cfg.operation = operation;
+    return deltaSyncService.get().getDeltaSync().syncOnce().getRight();
+  }
+
   public void scheduleCompact() throws Exception {
-    // Since we don't support scheduleCompact() operation in delta-streamer, assume upsert without any data that will
+    // Since we don't support scheduleCompact() operation in delta-streamer,
+    // assume upsert without any data that will
     // trigger scheduling compaction
     upsert(WriteOperationType.UPSERT);
   }
 
   public JavaRDD<WriteStatus> compact() throws Exception {
-    // Since we don't support compact() operation in delta-streamer, assume upsert without any data that will trigger
+    // Since we don't support compact() operation in delta-streamer,
+    // assume upsert without any data that will trigger
     // inline compaction
     return upsert(WriteOperationType.UPSERT);
   }
