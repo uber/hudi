@@ -19,9 +19,9 @@ package org.apache.hudi.keygen.parser;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.keygen.TimestampBasedAvroKeyGenerator.TimestampType;
-import org.apache.hudi.keygen.TimestampBasedAvroKeyGenerator.Config;
 import org.apache.hudi.keygen.KeyGenUtils;
+import org.apache.hudi.keygen.TimestampBasedAvroKeyGenerator.Config;
+import org.apache.hudi.keygen.TimestampBasedAvroKeyGenerator.TimestampType;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -29,6 +29,7 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.TimeZone;
 
 public class HoodieDateTimeParserImpl extends AbstractHoodieDateTimeParser {
 
@@ -87,7 +88,7 @@ public class HoodieDateTimeParserImpl extends AbstractHoodieDateTimeParser {
     } else {
       inputTimeZone = config.getString(Config.TIMESTAMP_INPUT_TIMEZONE_FORMAT_PROP, "");
     }
-    return !inputTimeZone.trim().isEmpty() ? ZoneId.of(inputTimeZone) : null;
+    return !inputTimeZone.trim().isEmpty() ? TimeZone.getTimeZone(inputTimeZone).toZoneId() : null;
   }
 
   @Override
@@ -98,7 +99,7 @@ public class HoodieDateTimeParserImpl extends AbstractHoodieDateTimeParser {
     } else {
       outputTimeZone = config.getString(Config.TIMESTAMP_OUTPUT_TIMEZONE_FORMAT_PROP, "");
     }
-    return !outputTimeZone.trim().isEmpty() ? ZoneId.of(outputTimeZone) : null;
+    return !outputTimeZone.trim().isEmpty() ? TimeZone.getTimeZone(outputTimeZone).toZoneId() : null;
   }
 
 }
