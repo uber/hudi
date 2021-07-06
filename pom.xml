@@ -83,10 +83,10 @@
     <maven-enforcer-plugin.version>3.0.0-M1</maven-enforcer-plugin.version>
 
     <java.version>1.8</java.version>
-    <fasterxml.version>2.6.7</fasterxml.version>
-    <fasterxml.jackson.databind.version>2.6.7.3</fasterxml.jackson.databind.version>
-    <fasterxml.jackson.module.scala.version>2.6.7.1</fasterxml.jackson.module.scala.version>
-    <fasterxml.jackson.dataformat.yaml.version>2.7.4</fasterxml.jackson.dataformat.yaml.version>
+    <fasterxml.version>2.10.0</fasterxml.version>
+    <fasterxml.jackson.databind.version>2.10.0</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.module.scala.version>2.10.0</fasterxml.jackson.module.scala.version>
+    <fasterxml.jackson.dataformat.yaml.version>2.10.0</fasterxml.jackson.dataformat.yaml.version>
     <fasterxml.spark3.version>2.10.0</fasterxml.spark3.version>
     <kafka.version>2.0.0</kafka.version>
     <glassfish.version>2.17</glassfish.version>
@@ -100,7 +100,7 @@
     <joda.version>2.9.9</joda.version>
     <hadoop.version>2.7.3</hadoop.version>
     <hive.groupid>org.apache.hive</hive.groupid>
-    <hive.version>2.3.1</hive.version>
+    <hive.version>2.3.9</hive.version>
     <hive.exec.classifier>core</hive.exec.classifier>
     <metrics.version>4.1.1</metrics.version>
     <orc.version>1.6.0</orc.version>
