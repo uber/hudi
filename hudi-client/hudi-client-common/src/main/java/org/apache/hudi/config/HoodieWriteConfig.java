@@ -43,6 +43,8 @@ import org.apache.hudi.metrics.MetricsReporterType;
 import org.apache.hudi.metrics.datadog.DatadogHttpClient.ApiSite;
 import org.apache.hudi.table.action.compact.CompactionTriggerStrategy;
 import org.apache.hudi.table.action.compact.strategy.CompactionStrategy;
+import org.apache.hudi.table.marker.MarkerIOMode;
+
 import org.apache.orc.CompressionKind;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 
@@ -208,6 +210,21 @@ public class HoodieWriteConfig extends HoodieConfig {
   public static final ConfigProperty<String> FINALIZE_WRITE_PARALLELISM = ConfigProperty
       .key("hoodie.finalize.write.parallelism")
       .defaultValue("1500")
+      .withDocumentation("");
+
+  public static final ConfigProperty<String> MARKERS_IO_MODE = ConfigProperty
+      .key("hoodie.markers.io.mode")
+      .defaultValue(MarkerIOMode.TIMELINE_BASED.toString())
+      .withDocumentation("");
+
+  public static final ConfigProperty<Integer> MARKERS_TIMELINE_BASED_BATCH_THREAD = ConfigProperty
+      .key("hoodie.markers.timeline_based.batch.thread")
+      .defaultValue(20)
+      .withDocumentation("");
+
+  public static final ConfigProperty<Long> MARKERS_TIMELINE_BASED_BATCH_INTERVAL_MS = ConfigProperty
+      .key("hoodie.markers.timeline_based.batch.interval_ms")
+      .defaultValue(50L)
       .withDocumentation("");
 
   public static final ConfigProperty<String> MARKERS_DELETE_PARALLELISM = ConfigProperty
@@ -502,6 +519,19 @@ public class HoodieWriteConfig extends HoodieConfig {
 
   public int getFinalizeWriteParallelism() {
     return getInt(FINALIZE_WRITE_PARALLELISM);
+  }
+
+  public MarkerIOMode getMarkersIOMode() {
+    String mode = getString(MARKERS_IO_MODE);
+    return MarkerIOMode.valueOf(mode.toUpperCase());
+  }
+
+  public int getMarkersTimelineBasedBatchThread() {
+    return getInt(MARKERS_TIMELINE_BASED_BATCH_THREAD);
+  }
+
+  public long getMarkersTimelineBasedBatchIntervalMs() {
+    return getLong(MARKERS_TIMELINE_BASED_BATCH_INTERVAL_MS);
   }
 
   public int getMarkersDeleteParallelism() {
@@ -1467,6 +1497,21 @@ public class HoodieWriteConfig extends HoodieConfig {
 
     public Builder withFinalizeWriteParallelism(int parallelism) {
       writeConfig.setValue(FINALIZE_WRITE_PARALLELISM, String.valueOf(parallelism));
+      return this;
+    }
+
+    public Builder withMarkersIOMode(String mode) {
+      writeConfig.setValue(MARKERS_IO_MODE, mode);
+      return this;
+    }
+
+    public Builder withMarkersTimelineBasedBatchThread(int numThreads) {
+      writeConfig.setValue(MARKERS_TIMELINE_BASED_BATCH_THREAD, String.valueOf(numThreads));
+      return this;
+    }
+
+    public Builder withMarkersTimelineBasedBatchIntervalMs(long intervalMs) {
+      writeConfig.setValue(MARKERS_TIMELINE_BASED_BATCH_INTERVAL_MS, String.valueOf(intervalMs));
       return this;
     }
 
