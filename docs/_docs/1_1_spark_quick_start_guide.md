@@ -19,15 +19,15 @@ From the extracted directory run spark-shell with Hudi as:
 ```scala
 // spark-shell for spark 3
 spark-shell \
-  --packages org.apache.hudi:hudi-spark3-bundle_2.12:0.8.0,org.apache.spark:spark-avro_2.12:3.0.1 \
+  --packages org.apache.hudi:hudi-spark3-bundle_2.12:0.9.0,org.apache.spark:spark-avro_2.12:3.0.1 \
   --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer'
 // spark-shell for spark 2 with scala 2.12
 spark-shell \
-  --packages org.apache.hudi:hudi-spark-bundle_2.12:0.8.0,org.apache.spark:spark-avro_2.12:2.4.4 \
+  --packages org.apache.hudi:hudi-spark-bundle_2.12:0.9.0,org.apache.spark:spark-avro_2.12:2.4.4 \
   --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer'
 // spark-shell for spark 2 with scala 2.11
 spark-shell \
-  --packages org.apache.hudi:hudi-spark-bundle_2.11:0.8.0,org.apache.spark:spark-avro_2.11:2.4.4 \
+  --packages org.apache.hudi:hudi-spark-bundle_2.11:0.9.0,org.apache.spark:spark-avro_2.11:2.4.4 \
   --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer'
 ```
 
@@ -300,6 +300,268 @@ spark.
   show(100, false)
 ```
 
+# Spark-Sql example
+## Setup
+Hudi support using spark sql to write and read data with the **HoodieSparkSessionExtension** sql extension.
+```shell
+# spark sql for spark 3
+spark-sql --packages org.apache.hudi:hudi-spark3-bundle_2.12:0.9.0,org.apache.spark:spark-avro_2.12:3.0.1 \
+--conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer' \
+--conf 'spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension'
+
+# spark-sql for spark 2 with scala 2.11
+spark-sql --packages org.apache.hudi:hudi-spark-bundle_2.11:0.9.0,org.apache.spark:spark-avro_2.11:2.4.4 \
+--conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer' \
+--conf 'spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension'
+
+# spark-sql for spark 2 with scala 2.12
+spark-sql \
+  --packages org.apache.hudi:hudi-spark-bundle_2.12:0.9.0,org.apache.spark:spark-avro_2.12:2.4.4 \
+  --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer' \
+  --conf 'spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension'
+```
+
+## Sql syntax
+### DDL
+Hudi support create table using the spark-sql.
+
+**Create Non-Partitioned Table**
+```sql
+-- create a managed cow table
+create table if not exists h0(
+  id int, 
+  name string, 
+  price double
+) using hudi
+options (
+  type = 'cow',
+  primaryKey = 'id'
+);
+
+-- creae an external mor table
+create table if not exists h1(
+  id int, 
+  name string, 
+  price double,
+  ts bigint
+) using hudi
+location '/tmp/hudi/h0'  
+options (
+  type = 'mor',
+  primaryKey = 'id,name',
+  preCombineField = 'ts' 
+)
+;
+
+-- create a non-primary key table
+create table if not exists h2(
+  id int, 
+  name string, 
+  price double
+) using hudi
+options (
+  type = 'cow'
+);
+```
+**Create Partitioned Table**
+```sql
+create table if not exists h_p0 (
+id bigint,
+name string,
+dt string，
+hh string  
+) using hudi
+location '/tmp/hudi/h_p0'
+options (
+  type = 'cow',
+  primaryKey = 'id',
+  preCombineField = 'ts'
+ ) 
+partitioned by (dt, hh)
+;
+```
+**Create Table Options**
+
+| Parameter Name | Introduction |
+|------------|--------|
+| primaryKey | The primary key names of the table, multiple fields separated by commas. |
+| type       | The table type to create. type = 'cow' means a COPY-ON-WRITE table,while type = 'mor' means a MERGE-ON-READ table. Default value is 'cow' without specified this option.|
+| preCombineField | The Pre-Combine field of the table. |
+
+## DML
+### MergeInto
+Hudi support merge-into for both spark 2 & spark 3.
+**Syntax**
+```sql
+MERGE INTO tableIdentifier AS target_alias
+USING (sub_query | tableIdentifier) AS source_alias
+ON <merge_condition>
+[ WHEN MATCHED [ AND <condition> ] THEN <matched_action> ]
+[ WHEN MATCHED [ AND <condition> ] THEN <matched_action> ]
+[ WHEN NOT MATCHED [ AND <condition> ]  THEN <not_matched_action> ]
+
+<merge_condition> =A equal bool condition 
+<matched_action>  =
+  DELETE  |
+  UPDATE SET *  |
+  UPDATE SET column1 = expression1 [, column2 = expression2 ...]
+<not_matched_action>  =
+  INSERT *  |
+  INSERT (column1 [, column2 ...]) VALUES (value1 [, value2 ...])
+```
+**Case**
+```sql
+merge into h0 as target
+using (
+  select id, name, price, flag from s
+) source
+on target.id = source.id
+when matched then update set *
+when not matched then insert *
+;
+
+merge into h0
+using (
+  select id, name, price, flag from s
+) source
+on h0.id = source.id
+when matched and flag != 'delete' then update set id = source.id, name = source.name, price = source.price * 2
+when matched and flag = 'delete' then delete
+when not matched then insert (id,name,price) values(id, name, price)
+;
+```
+**Notice**
+
+1、The merge-on condition must be the primary keys.
+2、Merge-On-Read table do not support partial. e.g.
+```sql
+ merge into h0 using s0
+ on h0.id = s0.id
+ when matched then update set price = s0.price * 2
+```
+This works well for Cow-On-Write table which support update only the **price** field. But it do not work
+for Merge-ON-READ table.
+
+3、Target table's fields cannot be the right-value of the update expression for Merge-On-Read table. e.g.
+```sql
+ merge into h0 using s0
+ on h0.id = s0.id
+ when matched then update set id = s0.id, 
+                   name = h0.name,
+                   price = s0.price + h0.price
+```
+This can work well for Cow-On-Write table but not for Merge-On-Read table.
+
+### Insert
+```sql
+insert into h0 select 1, 'a1', 20;
+
+-- insert static partition
+insert into h_p0 partition(dt = '2021-01-02') select 1, 'a1';
+
+-- insert dynamic partition
+insert into h_p0 select 1, 'a1', dt;
+
+-- insert dynamic partition
+insert into h_p1 select 1 as id, 'a1', '2021-01-03' as dt, '19' as hh;
+
+-- insert overwrite table
+insert overwrite table h0 select 1, 'a1', 20;
+
+-- insert overwrite table with static partition
+insert overwrite h_p0 partition(dt = '2021-01-02') select 1, 'a1';
+
+- insert overwrite table with dynamic partition
+insert overwrite table h_p1 select 2 as id, 'a2', '2021-01-03' as dt, '19' as hh;
+```
+
+### Update
+**Syntax**
+```sql
+ UPDATE tableIdentifier SET column = EXPRESSION(,column = EXPRESSION) [ WHERE boolExpression]
+```
+**Case**
+```sql
+ update h0 set price = price + 20 where id = 1;
+ update h0 set price = price *2, name = 'a2' where id = 2;
+```
+
+### Delete
+**Syntax**
+```sql
+ DELETE FROM tableIdentifier [ WHERE BOOL_EXPRESSION]
+```
+**Case**
+```sql
+delete from h0 where id = 1;
+```
+### AlterTable
+**Syntx**
+```sql
+-- Alter table name
+ALTER TABLE oldTableName RENAME TO newTableName
+
+-- Alter table add columns
+ALTER TABLE tableIdentifier ADD COLUMNS(colAndType (,colAndType)*)
+
+-- Alter table column type
+ALTER TABLE tableIdentifier CHANGE COLUMN colName colName colType
+```
+**Case**
+```sql
+alter table h0 rename to h0_1;
+
+alter table h0_1 add columns(ext0 string);
+
+alter tablee h0_1 change column id id bigint;
+```
+
+## Set hudi config
+### Use set command
+You can use the **set** command to set the hudi's config, which will work for the 
+whole spark session scope.
+```sql
+set hoodie.insert.shuffle.parallelism = 100;
+set hoodie.upsert.shuffle.parallelism = 100;
+set hoodie.delete.shuffle.parallelism = 100;
+```
+
+### Set with table options
+You can also set the config in the table's options when creating table which will work for
+the table scope only and override the config set by the SET command.
+```sql
+create table if not exists h3(
+  id bigint, 
+  name string, 
+  price double
+) using hudi
+options (
+  primaryKey = 'id',
+  type = 'mor',
+  ${hoodie.config.key1} = '${hoodie.config.value2}',
+  ${hoodie.config.key2} = '${hoodie.config.value2}',
+  ....
+);
+e.g.
+create table if not exists h3(
+  id bigint, 
+  name string, 
+  price double
+) using hudi
+options (
+  primaryKey = 'id',
+  type = 'mor',
+  hoodie.cleaner.fileversions.retained = '20',
+  hoodie.keep.max.commits = '20'
+);
+```
+You can alter the config in the table options by the **ALTER SERDEPROPERTIES**
+
+e.g.
+```sql
+ alter table h3 set serdeproperties (hoodie.keep.max.commits = '10') 
+```
+
 # Pyspark example
 ## Setup
 
@@ -310,15 +572,15 @@ Examples below illustrate the same flow above, instead using PySpark.
 export PYSPARK_PYTHON=$(which python3)
 # for spark3
 pyspark \
-  --packages org.apache.hudi:hudi-spark3-bundle_2.12:0.8.0,org.apache.spark:spark-avro_2.12:3.0.1 \
+  --packages org.apache.hudi:hudi-spark3-bundle_2.12:0.9.0,org.apache.spark:spark-avro_2.12:3.0.1 \
   --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer'
 # for spark2 with scala 2.12
 pyspark \
-  --packages org.apache.hudi:hudi-spark-bundle_2.12:0.8.0,org.apache.spark:spark-avro_2.12:2.4.4 \
+  --packages org.apache.hudi:hudi-spark-bundle_2.12:0.9.0,org.apache.spark:spark-avro_2.12:2.4.4 \
   --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer'
 # for spark2 with scala 2.11
 pyspark \
-  --packages org.apache.hudi:hudi-spark-bundle_2.11:0.8.0,org.apache.spark:spark-avro_2.11:2.4.4 \
+  --packages org.apache.hudi:hudi-spark-bundle_2.11:0.9.0,org.apache.spark:spark-avro_2.11:2.4.4 \
   --conf 'spark.serializer=org.apache.spark.serializer.KryoSerializer'
 ```
 
@@ -535,7 +797,7 @@ See the [deletion section](/docs/writing_data.html#deletes) of the writing data 
 
 You can also do the quickstart by [building hudi yourself](https://github.com/apache/hudi#building-apache-hudi-from-source), 
 and using `--jars <path to hudi_code>/packaging/hudi-spark-bundle/target/hudi-spark-bundle_2.1?-*.*.*-SNAPSHOT.jar` in the spark-shell command above
-instead of `--packages org.apache.hudi:hudi-spark3-bundle_2.12:0.8.0`. Hudi also supports scala 2.12. Refer [build with scala 2.12](https://github.com/apache/hudi#build-with-scala-212)
+instead of `--packages org.apache.hudi:hudi-spark3-bundle_2.12:0.9.0`. Hudi also supports scala 2.12. Refer [build with scala 2.12](https://github.com/apache/hudi#build-with-scala-212)
 for more info.
 
 Also, we used Spark here to show case the capabilities of Hudi. However, Hudi can support multiple table types/query types and 
