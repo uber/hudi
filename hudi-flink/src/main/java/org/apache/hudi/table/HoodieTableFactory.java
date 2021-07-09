@@ -18,6 +18,7 @@
 
 package org.apache.hudi.table;
 
+import org.apache.hudi.common.model.WriteOperationType;
 import org.apache.hudi.configuration.FlinkOptions;
 import org.apache.hudi.keygen.ComplexAvroKeyGenerator;
 import org.apache.hudi.keygen.NonpartitionedAvroKeyGenerator;
@@ -144,6 +145,11 @@ public class HoodieTableFactory implements DynamicTableSourceFactory, DynamicTab
       TableSchema schema) {
     // table name
     conf.setString(FlinkOptions.TABLE_NAME.key(), tableName);
+    // append only
+    if (conf.getBoolean(FlinkOptions.APPEND_ONLY_ENABLE)) {
+      // append only should use insert operation
+      conf.setString(FlinkOptions.OPERATION, WriteOperationType.INSERT.value());
+    }
     // hoodie key about options
     setupHoodieKeyOptions(conf, table);
     // cleaning options
@@ -203,17 +209,17 @@ public class HoodieTableFactory implements DynamicTableSourceFactory, DynamicTab
 
   /**
    * Inferences the deserialization Avro schema from the table schema (e.g. the DDL)
-   * if both options {@link FlinkOptions#READ_AVRO_SCHEMA_PATH} and
-   * {@link FlinkOptions#READ_AVRO_SCHEMA} are not specified.
+   * if both options {@link FlinkOptions#SOURCE_AVRO_SCHEMA_PATH} and
+   * {@link FlinkOptions#SOURCE_AVRO_SCHEMA} are not specified.
    *
    * @param conf    The configuration
    * @param rowType The specified table row type
    */
   private static void inferAvroSchema(Configuration conf, LogicalType rowType) {
-    if (!conf.getOptional(FlinkOptions.READ_AVRO_SCHEMA_PATH).isPresent()
-        && !conf.getOptional(FlinkOptions.READ_AVRO_SCHEMA).isPresent()) {
+    if (!conf.getOptional(FlinkOptions.SOURCE_AVRO_SCHEMA_PATH).isPresent()
+        && !conf.getOptional(FlinkOptions.SOURCE_AVRO_SCHEMA).isPresent()) {
       String inferredSchema = AvroSchemaConverter.convertToSchema(rowType).toString();
-      conf.setString(FlinkOptions.READ_AVRO_SCHEMA, inferredSchema);
+      conf.setString(FlinkOptions.SOURCE_AVRO_SCHEMA, inferredSchema);
     }
   }
 }

@@ -63,16 +63,14 @@ public class FlinkStreamerConfig extends Configuration {
       required = true)
   public String targetBasePath;
 
-  @Parameter(names = {"--read-schema-path"},
-      description = "Avro schema file path, the parsed schema is used for deserializing.",
-      required = true)
-  public String readSchemaFilePath;
-
   @Parameter(names = {"--target-table"}, description = "Name of the target table in Hive.", required = true)
   public String targetTableName;
 
   @Parameter(names = {"--table-type"}, description = "Type of table. COPY_ON_WRITE (or) MERGE_ON_READ.", required = true)
   public String tableType;
+
+  @Parameter(names = {"--append-only"}, description = "Write data to new parquet in every checkpoint. Only support in COPY_ON_WRITE table.", required = true)
+  public Boolean appendOnly = false;
 
   @Parameter(names = {"--props"}, description = "Path to properties file on localfs or dfs, with configurations for "
       + "hoodie client, schema provider, key generator and data source. For hoodie client props, sane defaults are "
@@ -150,11 +148,11 @@ public class FlinkStreamerConfig extends Configuration {
           description = "Whether to load partitions in state if partition path matching， default *")
   public String indexPartitionRegex = ".*";
 
-  @Parameter(names = {"--avro-schema-path"}, description = "Avro schema file path, the parsed schema is used for deserialization")
-  public String avroSchemaPath = "";
+  @Parameter(names = {"--source-avro-schema-path"}, description = "Source avro schema file path, the parsed schema is used for deserialization")
+  public String sourceAvroSchemaPath = "";
 
-  @Parameter(names = {"--avro-schema"}, description = "Avro schema string, the parsed schema is used for deserialization")
-  public String avroSchema = "";
+  @Parameter(names = {"--source-avro-schema"}, description = "Source avro schema string, the parsed schema is used for deserialization")
+  public String sourceAvroSchema = "";
 
   @Parameter(names = {"--utc-timezone"}, description = "Use UTC timezone or local timezone to the conversion between epoch"
           + " time and LocalDateTime. Hive 0.x/1.x/2.x use local timezone. But Hive 3.x"
@@ -162,7 +160,12 @@ public class FlinkStreamerConfig extends Configuration {
   public Boolean utcTimezone = true;
 
   @Parameter(names = {"--write-partition-url-encode"}, description = "Whether to encode the partition path url, default false")
-  public Boolean writePartitionUrlEncode;
+  public Boolean writePartitionUrlEncode = false;
+
+  @Parameter(names = {"--hive-style-partitioning"}, description = "Whether to use Hive style partitioning.\n"
+      + "If set true, the names of partition folders follow <partition_column_name>=<partition_value> format.\n"
+      + "By default false (the names of partition folders are only partition values)")
+  public Boolean hiveStylePartitioning = false;
 
   @Parameter(names = {"--write-task-max-size"}, description = "Maximum memory in MB for a write task, when the threshold hits,\n"
           + "it flushes the max size data bucket to avoid OOM, default 1GB")
@@ -287,11 +290,16 @@ public class FlinkStreamerConfig extends Configuration {
     org.apache.flink.configuration.Configuration conf = fromMap(propsMap);
 
     conf.setString(FlinkOptions.PATH, config.targetBasePath);
-    conf.setString(FlinkOptions.READ_AVRO_SCHEMA_PATH, config.readSchemaFilePath);
     conf.setString(FlinkOptions.TABLE_NAME, config.targetTableName);
     // copy_on_write works same as COPY_ON_WRITE
     conf.setString(FlinkOptions.TABLE_TYPE, config.tableType.toUpperCase());
-    conf.setString(FlinkOptions.OPERATION, config.operation.value());
+    conf.setBoolean(FlinkOptions.APPEND_ONLY_ENABLE, config.appendOnly);
+    if (config.appendOnly) {
+      // append only should use insert operation
+      conf.setString(FlinkOptions.OPERATION, WriteOperationType.INSERT.value());
+    } else {
+      conf.setString(FlinkOptions.OPERATION, config.operation.value());
+    }
     conf.setString(FlinkOptions.PRECOMBINE_FIELD, config.sourceOrderingField);
     conf.setString(FlinkOptions.PAYLOAD_CLASS, config.payloadClassName);
     conf.setBoolean(FlinkOptions.INSERT_DROP_DUPS, config.filterDupes);
@@ -311,10 +319,11 @@ public class FlinkStreamerConfig extends Configuration {
     conf.setDouble(FlinkOptions.INDEX_STATE_TTL, config.indexStateTtl);
     conf.setBoolean(FlinkOptions.INDEX_GLOBAL_ENABLED, config.indexGlobalEnabled);
     conf.setString(FlinkOptions.INDEX_PARTITION_REGEX, config.indexPartitionRegex);
-    conf.setString(FlinkOptions.READ_AVRO_SCHEMA_PATH, config.avroSchemaPath);
-    conf.setString(FlinkOptions.READ_AVRO_SCHEMA, config.avroSchema);
+    conf.setString(FlinkOptions.SOURCE_AVRO_SCHEMA_PATH, config.sourceAvroSchemaPath);
+    conf.setString(FlinkOptions.SOURCE_AVRO_SCHEMA, config.sourceAvroSchema);
     conf.setBoolean(FlinkOptions.UTC_TIMEZONE, config.utcTimezone);
-    conf.setBoolean(FlinkOptions.PARTITION_PATH_URL_ENCODE, config.writePartitionUrlEncode);
+    conf.setBoolean(FlinkOptions.URL_ENCODE_PARTITIONING, config.writePartitionUrlEncode);
+    conf.setBoolean(FlinkOptions.HIVE_STYLE_PARTITIONING, config.hiveStylePartitioning);
     conf.setDouble(FlinkOptions.WRITE_TASK_MAX_SIZE, config.writeTaskMaxSize);
     conf.setDouble(FlinkOptions.WRITE_BATCH_SIZE, config.writeBatchSize);
     conf.setInteger(FlinkOptions.WRITE_LOG_BLOCK_SIZE, config.writeLogBlockSize);
