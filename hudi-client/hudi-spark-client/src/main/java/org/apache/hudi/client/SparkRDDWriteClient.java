@@ -200,8 +200,7 @@ public class SparkRDDWriteClient<T extends HoodieRecordPayload> extends
     table.validateInsertSchema();
     preWrite(instantTime, WriteOperationType.INSERT_OVERWRITE, table.getMetaClient());
     HoodieWriteMetadata result = table.insertOverwrite(context, instantTime, records);
-    return new HoodieWriteResult(postWrite(result, instantTime, table),
-            result.getPartitionToReplaceFileIds());
+    return new HoodieWriteResult(postWrite(result, instantTime, table), result.getPartitionToReplaceFileIds());
   }
 
 

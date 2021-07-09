@@ -66,13 +66,7 @@ public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
 
   public JavaRDD<WriteStatus> insertOverwriteTable() throws
           Exception {
-    return insertOverwriteTable(WriteOperationType.INSERT_OVERWRITE_TABLE);
-  }
-
-  public JavaRDD<WriteStatus> insertOverwriteTable(WriteOperationType operation) throws
-          Exception {
-    cfg.operation = operation;
-    return deltaSyncService.get().getDeltaSync().syncOnce().getRight();
+    return insertOverwrite(WriteOperationType.INSERT_OVERWRITE_TABLE);
   }
 
   public void scheduleCompact() throws Exception {
