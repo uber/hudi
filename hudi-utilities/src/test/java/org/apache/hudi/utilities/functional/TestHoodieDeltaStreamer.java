@@ -1639,6 +1639,46 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     }
   }
 
+  @Test
+  public void testInsertOverwriteAndInsertOverwriteTable() throws Exception {
+    String tablePath = dfsBasePath + "/test_table";
+    // Initial BULK_INSERT
+    HoodieDeltaStreamer.Config config = TestHelpers.makeConfig(tablePath, WriteOperationType.BULK_INSERT);
+    new HoodieDeltaStreamer(config, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tablePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tablePath, dfs, 1);
+    TestHelpers.assertDistanceCount(1000, tablePath + "/*/*.parquet", sqlContext);
+    // INSERT_OVERWRITE
+    config.sourceLimit = 0;
+    new HoodieDeltaStreamer(config, jsc).sync();
+    config.operation = WriteOperationType.INSERT_OVERWRITE;
+    new HoodieDeltaStreamer(config, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tablePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tablePath, dfs, 1);
+    TestHelpers.assertDistanceCount(1000, tablePath + "/*/*.parquet", sqlContext);
+
+    config.sourceLimit = 2000;
+    new HoodieDeltaStreamer(config, jsc).sync();
+    TestHelpers.assertRecordCount(2000, tablePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00001", tablePath, dfs, 2);
+    TestHelpers.assertDistanceCount(2000, tablePath + "/*/*.parquet", sqlContext);
+
+    // INSERT_OVERWRITE_TABLE
+    config.sourceLimit = 0;
+    new HoodieDeltaStreamer(config, jsc).sync();
+    config.operation = WriteOperationType.INSERT_OVERWRITE_TABLE;
+    new HoodieDeltaStreamer(config, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tablePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00001", tablePath, dfs, 2);
+    TestHelpers.assertDistanceCount(1000, tablePath + "/*/*.parquet", sqlContext);
+
+    config.sourceLimit = 2000;
+    new HoodieDeltaStreamer(config, jsc).sync();
+    TestHelpers.assertRecordCount(2000, tablePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00002", tablePath, dfs, 3);
+    TestHelpers.assertDistanceCount(2000, tablePath + "/*/*.parquet", sqlContext);
+  }
+
   /**
    * UDF to calculate Haversine distance.
    */
