@@ -18,11 +18,14 @@
 
 package org.apache.hudi.keygen;
 
-import org.apache.avro.generic.GenericRecord;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.exception.HoodieKeyGeneratorException;
 import org.apache.hudi.keygen.constant.KeyGeneratorOptions;
+
+import org.apache.avro.generic.GenericRecord;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.StructType;
 
 import java.io.IOException;
 
@@ -67,6 +70,30 @@ public class TimestampBasedKeyGenerator extends SimpleKeyGenerator {
     Object fieldVal = null;
     buildFieldPositionMapIfNeeded(row.schema());
     Object partitionPathFieldVal = RowKeyGeneratorHelper.getNestedFieldVal(row, partitionPathPositions.get(getPartitionPathFields().get(0)));
+    try {
+      if (partitionPathFieldVal == null || partitionPathFieldVal.toString().contains(DEFAULT_PARTITION_PATH) || partitionPathFieldVal.toString().contains(NULL_RECORDKEY_PLACEHOLDER)
+          || partitionPathFieldVal.toString().contains(EMPTY_RECORDKEY_PLACEHOLDER)) {
+        fieldVal = timestampBasedAvroKeyGenerator.getDefaultPartitionVal();
+      } else {
+        fieldVal = partitionPathFieldVal;
+      }
+      return timestampBasedAvroKeyGenerator.getPartitionPath(fieldVal);
+    } catch (Exception e) {
+      throw new HoodieKeyGeneratorException("Unable to parse input partition field :" + fieldVal, e);
+    }
+  }
+
+  @Override
+  public String getPartitionPath(InternalRow internalRow, StructType structType) {
+    buildFieldDataTypesMapIfNeeded(structType);
+    partitionPathPositions.entrySet().forEach(entry -> {
+      if (entry.getValue().size() > 1) {
+        throw new IllegalArgumentException("Nested column for partitioning is not supported with disabling meta columns");
+      }
+    });
+    Object partitionPathFieldVal = RowKeyGeneratorHelper.getPartitionPathFromInternalRow(internalRow, getPartitionPathFields(),
+        hiveStylePartitioning, partitionPathPositions, partitionPathDataTypes);
+    Object fieldVal = null;
     try {
       if (partitionPathFieldVal == null || partitionPathFieldVal.toString().contains(DEFAULT_PARTITION_PATH) || partitionPathFieldVal.toString().contains(NULL_RECORDKEY_PLACEHOLDER)
           || partitionPathFieldVal.toString().contains(EMPTY_RECORDKEY_PLACEHOLDER)) {

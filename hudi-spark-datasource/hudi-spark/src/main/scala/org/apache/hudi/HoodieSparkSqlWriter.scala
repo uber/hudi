@@ -35,7 +35,7 @@ import org.apache.hudi.common.util.{CommitUtils, ReflectionUtils}
 import org.apache.hudi.config.HoodieBootstrapConfig.{BOOTSTRAP_BASE_PATH_PROP, BOOTSTRAP_INDEX_CLASS_PROP}
 import org.apache.hudi.config.{HoodieInternalConfig, HoodieWriteConfig}
 import org.apache.hudi.exception.HoodieException
-import org.apache.hudi.execution.bulkinsert.BulkInsertInternalPartitionerWithRowsFactory
+import org.apache.hudi.execution.bulkinsert.{BulkInsertInternalPartitionerWithRowsFactory, NonSortPartitionerWithRows}
 import org.apache.hudi.hive.util.ConfigUtils
 import org.apache.hudi.hive.{HiveSyncConfig, HiveSyncTool}
 import org.apache.hudi.index.SparkHoodieIndex
@@ -128,14 +128,35 @@ object HoodieSparkSqlWriter {
           .setPayloadClassName(hoodieConfig.getString(PAYLOAD_CLASS_OPT_KEY))
           .setPreCombineField(hoodieConfig.getStringOrDefault(PRECOMBINE_FIELD_OPT_KEY, null))
           .setPartitionColumns(partitionColumns)
+          .setPopulateMetaColumns(parameters.getOrElse(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.key(), HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.defaultValue()).toBoolean)
           .initTable(sparkContext.hadoopConfiguration, path.get)
         tableConfig = tableMetaClient.getTableConfig
+      } else {
+        // validate table properties
+        val tableMetaClient = HoodieTableMetaClient.builder().setBasePath(path.get).setConf(sparkContext.hadoopConfiguration).build()
+        if (!tableMetaClient.getTableConfig.populateMetaColumns() &&
+          parameters.getOrElse(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.key(), HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.defaultValue()).toBoolean) {
+          throw new HoodieException(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.key() + " already disabled for the table. Can't be enabled back. ")
+        }
+      }
+
+      if ( !parameters.getOrElse(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.key(), HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.defaultValue()).toBoolean
+        && operation != WriteOperationType.BULK_INSERT) {
+        throw new HoodieException(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.key() + " can only be enabled for " + WriteOperationType.BULK_INSERT
+          + " operation");
       }
 
       val commitActionType = CommitUtils.getCommitActionType(operation, tableConfig.getTableType)
 
       // short-circuit if bulk_insert via row is enabled.
       // scalastyle:off
+      if (hoodieConfig.getBoolean(ENABLE_ROW_WRITER_OPT_KEY) &&
+        operation == WriteOperationType.BULK_INSERT && !parameters.getOrElse(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.key(),
+        HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.defaultValue()).toBoolean) {
+        val (success, commitTime: common.util.Option[String]) = bulkInsertAsRowNoMetaColumns(sqlContext, parameters, df, tblName,
+          basePath, path, instantTime)
+        return (success, commitTime, common.util.Option.empty(), hoodieWriteClient.orNull, tableConfig)
+      }
       if (hoodieConfig.getBoolean(ENABLE_ROW_WRITER_OPT_KEY) &&
         operation == WriteOperationType.BULK_INSERT) {
         val (success, commitTime: common.util.Option[String]) = bulkInsertAsRow(sqlContext, parameters, df, tblName,
@@ -374,6 +395,60 @@ object HoodieSparkSqlWriter {
     } else {
       true
     }
+    (syncHiveSuccess, common.util.Option.ofNullable(instantTime))
+  }
+
+  def bulkInsertAsRowNoMetaColumns(sqlContext: SQLContext,
+                                   parameters: Map[String, String],
+                                   df: DataFrame,
+                                   tblName: String,
+                                   basePath: Path,
+                                   path: Option[String],
+                                   instantTime: String): (Boolean, common.util.Option[String]) = {
+    val sparkContext = sqlContext.sparkContext
+    // register classes & schemas
+    val (structName, nameSpace) = AvroConversionUtils.getAvroRecordNameAndNamespace(tblName)
+    sparkContext.getConf.registerKryoClasses(
+      Array(classOf[org.apache.avro.generic.GenericData],
+        classOf[org.apache.avro.Schema]))
+    val schema = AvroConversionUtils.convertStructTypeToAvroSchema(df.schema, structName, nameSpace)
+    sparkContext.getConf.registerAvroSchemas(schema)
+    log.info(s"Registered avro schema : ${schema.toString(true)}")
+    if (parameters(INSERT_DROP_DUPS_OPT_KEY.key()).toBoolean ||
+      parameters.getOrDefault(HoodieWriteConfig.COMBINE_BEFORE_INSERT_PROP.key(), "false").toBoolean) {
+      throw new HoodieException("Dropping duplicates and Combine before Insert for bulk_insert with No Meta columns in " +
+        "row writer path is not supported yet")
+    }
+    val params = parameters.updated(HoodieWriteConfig.AVRO_SCHEMA.key(), schema.toString)
+    parameters.updated(HoodieInternalConfig.BULKINSERT_ARE_PARTITIONER_RECORDS_SORTED, String.valueOf(false))
+    val hoodieDF = HoodieDatasetBulkInsertHelper.prepareHoodieDatasetForBulkInsertAppendOnly(df)
+    if (SPARK_VERSION.startsWith("2.")) {
+      hoodieDF.write.format("org.apache.hudi.internal")
+        .option(DataSourceInternalWriterHelper.INSTANT_TIME_OPT_KEY, instantTime)
+        .option(HoodieWriteConfig.BULKINSERT_INPUT_DATA_SCHEMA_DDL.key(), hoodieDF.schema.toDDL)
+        .options(params)
+        .mode(SaveMode.Append)
+        .save()
+    } else if (SPARK_VERSION.startsWith("3.")) {
+      hoodieDF.write.format("org.apache.hudi.spark3.internal")
+        .option(DataSourceInternalWriterHelper.INSTANT_TIME_OPT_KEY, instantTime)
+        .option(HoodieWriteConfig.BULKINSERT_INPUT_DATA_SCHEMA_DDL.key(), hoodieDF.schema.toDDL)
+        .options(params)
+        .mode(SaveMode.Append)
+        .save()
+    } else {
+      throw new HoodieException("Bulk insert using row writer is not supported with current Spark version."
+        + " To use row writer please switch to spark 2 or spark 3")
+    }
+    val hoodieConfig = HoodieWriterUtils.convertMapToHoodieConfig(params)
+    val hiveSyncEnabled = hoodieConfig.getStringOrDefault(HIVE_SYNC_ENABLED_OPT_KEY).toBoolean
+    val metaSyncEnabled = hoodieConfig.getStringOrDefault(META_SYNC_ENABLED_OPT_KEY).toBoolean
+    val syncHiveSuccess =
+      if (hiveSyncEnabled || metaSyncEnabled) {
+        metaSync(sqlContext.sparkSession, hoodieConfig, basePath, df.schema)
+      } else {
+        true
+      }
     (syncHiveSuccess, common.util.Option.ofNullable(instantTime))
   }
 

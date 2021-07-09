@@ -298,7 +298,7 @@ object DataSourceWriteOptions {
   val ENABLE_ROW_WRITER_OPT_KEY: ConfigProperty[String] = ConfigProperty
     .key("hoodie.datasource.write.row.writer.enable")
     .defaultValue("false")
-    .withDocumentation("")
+    .withDocumentation("Will perform write operations directly using the spark native `Row` representation")
 
   /**
    * Option keys beginning with this prefix, are automatically added to the commit/deltacommit metadata.

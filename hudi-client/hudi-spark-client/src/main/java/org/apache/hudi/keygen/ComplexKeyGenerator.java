@@ -17,10 +17,13 @@
 
 package org.apache.hudi.keygen;
 
-import org.apache.avro.generic.GenericRecord;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.keygen.constant.KeyGeneratorOptions;
+
+import org.apache.avro.generic.GenericRecord;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.types.StructType;
 
 import java.util.Arrays;
 import java.util.stream.Collectors;
@@ -62,6 +65,18 @@ public class ComplexKeyGenerator extends BuiltinKeyGenerator {
     buildFieldPositionMapIfNeeded(row.schema());
     return RowKeyGeneratorHelper.getPartitionPathFromRow(row, getPartitionPathFields(),
         hiveStylePartitioning, partitionPathPositions);
+  }
+
+  @Override
+  public String getPartitionPath(InternalRow row, StructType structType) {
+    buildFieldDataTypesMapIfNeeded(structType);
+    partitionPathPositions.entrySet().forEach(entry -> {
+      if (entry.getValue().size() > 1) {
+        throw new IllegalArgumentException("Nested column for partitioning is not supported with disabling meta columns");
+      }
+    });
+    return RowKeyGeneratorHelper.getPartitionPathFromInternalRow(row, getPartitionPathFields(),
+        hiveStylePartitioning, partitionPathPositions, partitionPathDataTypes);
   }
 
 }

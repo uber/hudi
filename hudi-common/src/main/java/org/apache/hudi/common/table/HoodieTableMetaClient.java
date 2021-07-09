@@ -602,6 +602,7 @@ public class HoodieTableMetaClient implements Serializable {
     private String partitionColumns;
     private String bootstrapIndexClass;
     private String bootstrapBasePath;
+    private boolean populateMetaColumns;
 
     private PropertyBuilder() {
 
@@ -675,6 +676,11 @@ public class HoodieTableMetaClient implements Serializable {
       return this;
     }
 
+    public PropertyBuilder setPopulateMetaColumns(boolean populateMetaColumns) {
+      this.populateMetaColumns = populateMetaColumns;
+      return this;
+    }
+
     public PropertyBuilder fromMetaClient(HoodieTableMetaClient metaClient) {
       return setTableType(metaClient.getTableType())
         .setTableName(metaClient.getTableConfig().getTableName())
@@ -724,6 +730,9 @@ public class HoodieTableMetaClient implements Serializable {
       }
       if (hoodieConfig.contains(HoodieTableConfig.HOODIE_TABLE_CREATE_SCHEMA)) {
         setTableCreateSchema(hoodieConfig.getString(HoodieTableConfig.HOODIE_TABLE_CREATE_SCHEMA));
+      }
+      if (hoodieConfig.contains(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS)) {
+        setPopulateMetaColumns(hoodieConfig.getBoolean(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS));
       }
       return this;
     }
@@ -777,6 +786,9 @@ public class HoodieTableMetaClient implements Serializable {
       }
       if (null != recordKeyFields) {
         tableConfig.setValue(HoodieTableConfig.HOODIE_TABLE_RECORDKEY_FIELDS, recordKeyFields);
+      }
+      if (!populateMetaColumns) {
+        tableConfig.setValue(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS, Boolean.toString(populateMetaColumns));
       }
       return tableConfig.getProps();
     }

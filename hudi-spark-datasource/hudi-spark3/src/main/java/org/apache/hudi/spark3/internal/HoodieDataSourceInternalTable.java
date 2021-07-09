@@ -18,9 +18,9 @@
 
 package org.apache.hudi.spark3.internal;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.config.HoodieWriteConfig;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
 import org.apache.spark.sql.connector.catalog.TableCapability;
@@ -42,14 +42,17 @@ class HoodieDataSourceInternalTable implements SupportsWrite {
   private final SparkSession jss;
   private final Configuration hadoopConfiguration;
   private final boolean arePartitionRecordsSorted;
+  private final boolean populateMetaColumns;
 
   public HoodieDataSourceInternalTable(String instantTime, HoodieWriteConfig config,
-      StructType schema, SparkSession jss, Configuration hadoopConfiguration, boolean arePartitionRecordsSorted) {
+                                       StructType schema, SparkSession jss, Configuration hadoopConfiguration, boolean populateMetaColumns,
+                                       boolean arePartitionRecordsSorted) {
     this.instantTime = instantTime;
     this.writeConfig = config;
     this.structType = schema;
     this.jss = jss;
     this.hadoopConfiguration = hadoopConfiguration;
+    this.populateMetaColumns = populateMetaColumns;
     this.arePartitionRecordsSorted = arePartitionRecordsSorted;
   }
 
@@ -65,7 +68,8 @@ class HoodieDataSourceInternalTable implements SupportsWrite {
 
   @Override
   public Set<TableCapability> capabilities() {
-    return new HashSet<TableCapability>() {{
+    return new HashSet<TableCapability>() {
+      {
         add(TableCapability.BATCH_WRITE);
         add(TableCapability.TRUNCATE);
       }
@@ -75,6 +79,6 @@ class HoodieDataSourceInternalTable implements SupportsWrite {
   @Override
   public WriteBuilder newWriteBuilder(LogicalWriteInfo logicalWriteInfo) {
     return new HoodieDataSourceInternalBatchWriteBuilder(instantTime, writeConfig, structType, jss,
-        hadoopConfiguration, arePartitionRecordsSorted);
+        hadoopConfiguration, populateMetaColumns, arePartitionRecordsSorted);
   }
 }

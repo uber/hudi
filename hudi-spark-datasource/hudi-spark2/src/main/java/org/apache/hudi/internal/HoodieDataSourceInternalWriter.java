@@ -46,12 +46,14 @@ public class HoodieDataSourceInternalWriter implements DataSourceWriter {
   private final StructType structType;
   private final DataSourceInternalWriterHelper dataSourceInternalWriterHelper;
   private final Boolean arePartitionRecordsSorted;
+  private final boolean populateMetaColumns;
 
   public HoodieDataSourceInternalWriter(String instantTime, HoodieWriteConfig writeConfig, StructType structType,
-                                        SparkSession sparkSession, Configuration configuration, boolean arePartitionRecordsSorted) {
+                                        SparkSession sparkSession, Configuration configuration, boolean populateMetaColumns, boolean arePartitionRecordsSorted) {
     this.instantTime = instantTime;
     this.writeConfig = writeConfig;
     this.structType = structType;
+    this.populateMetaColumns = populateMetaColumns;
     this.arePartitionRecordsSorted = arePartitionRecordsSorted;
     this.dataSourceInternalWriterHelper = new DataSourceInternalWriterHelper(instantTime, writeConfig, structType,
         sparkSession, configuration);
@@ -62,7 +64,7 @@ public class HoodieDataSourceInternalWriter implements DataSourceWriter {
     dataSourceInternalWriterHelper.createInflightCommit();
     if (WriteOperationType.BULK_INSERT == dataSourceInternalWriterHelper.getWriteOperationType()) {
       return new HoodieBulkInsertDataInternalWriterFactory(dataSourceInternalWriterHelper.getHoodieTable(),
-          writeConfig, instantTime, structType, arePartitionRecordsSorted);
+          writeConfig, instantTime, structType, populateMetaColumns, arePartitionRecordsSorted);
     } else {
       throw new IllegalArgumentException("Write Operation Type + " + dataSourceInternalWriterHelper.getWriteOperationType() + " not supported ");
     }

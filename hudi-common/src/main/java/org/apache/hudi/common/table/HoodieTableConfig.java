@@ -138,6 +138,11 @@ public class HoodieTableConfig extends HoodieConfig implements Serializable {
       .noDefaultValue()
       .withDocumentation("Base path of the dataset that needs to be bootstrapped as a Hudi table");
 
+  public static final ConfigProperty<String> HOODIE_POPULATE_META_COLUMNS = ConfigProperty
+      .key("hoodie.populate.meta.columns")
+      .defaultValue("true")
+      .withDocumentation("When enabled, populates all meta columns. When disabled, no meta columns are populated");
+
   public static final String NO_OP_BOOTSTRAP_INDEX_CLASS = NoOpBootstrapIndex.class.getName();
 
   public HoodieTableConfig(FileSystem fs, String metaPath, String payloadClassName) {
@@ -308,6 +313,13 @@ public class HoodieTableConfig extends HoodieConfig implements Serializable {
    */
   public String getArchivelogFolder() {
     return getStringOrDefault(HOODIE_ARCHIVELOG_FOLDER_PROP);
+  }
+
+  /**
+   * @returns true is meta columns need to be populated. else returns false.
+   */
+  public boolean populateMetaColumns() {
+    return getBoolean(HOODIE_POPULATE_META_COLUMNS);
   }
 
   public Map<String, String> propsMap() {

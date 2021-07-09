@@ -105,6 +105,11 @@ public class HoodieClientTestUtils {
 
   public static Dataset<Row> readCommit(String basePath, SQLContext sqlContext, HoodieTimeline commitTimeline,
                                         String instantTime) {
+    return readCommit(basePath, sqlContext, commitTimeline, instantTime, true);
+  }
+
+  public static Dataset<Row> readCommit(String basePath, SQLContext sqlContext, HoodieTimeline commitTimeline,
+                                        String instantTime, boolean filterByCommitTime) {
     HoodieInstant commitInstant = new HoodieInstant(false, HoodieTimeline.COMMIT_ACTION, instantTime);
     if (!commitTimeline.containsInstant(commitInstant)) {
       throw new HoodieException("No commit exists at " + instantTime);
@@ -113,8 +118,12 @@ public class HoodieClientTestUtils {
       HashMap<String, String> paths =
           getLatestFileIDsToFullPath(basePath, commitTimeline, Arrays.asList(commitInstant));
       LOG.info("Path :" + paths.values());
-      return sqlContext.read().parquet(paths.values().toArray(new String[paths.size()]))
-          .filter(String.format("%s ='%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, instantTime));
+      Dataset<Row> unFilteredRows = sqlContext.read().parquet(paths.values().toArray(new String[paths.size()]));
+      if (filterByCommitTime) {
+        return unFilteredRows.filter(String.format("%s ='%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, instantTime));
+      } else {
+        return unFilteredRows;
+      }
     } catch (Exception e) {
       throw new HoodieException("Error reading commit " + instantTime, e);
     }
