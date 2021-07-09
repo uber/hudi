@@ -24,11 +24,13 @@ import org.apache.hudi.common.table.{HoodieTableMetaClient, TableSchemaResolver}
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView
 import org.apache.hudi.hadoop.utils.HoodieRealtimeInputFormatUtils
 import org.apache.hudi.hadoop.utils.HoodieRealtimeRecordReaderUtils.getMaxCompactionMemoryInBytes
+import org.apache.hudi.utils.BucketUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.avro.SchemaConverters
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{FileStatusCache, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -49,14 +51,15 @@ case class HoodieMergeOnReadTableState(tableStructSchema: StructType,
                                        requiredStructSchema: StructType,
                                        tableAvroSchema: String,
                                        requiredAvroSchema: String,
-                                       hoodieRealtimeFileSplits: List[HoodieMergeOnReadFileSplit],
+                                       hoodieRealtimeFileSplits: List[List[HoodieMergeOnReadFileSplit]],
                                        preCombineField: Option[String])
 
 class MergeOnReadSnapshotRelation(val sqlContext: SQLContext,
                                   val optParams: Map[String, String],
                                   val userSchema: StructType,
                                   val globPaths: Option[Seq[Path]],
-                                  val metaClient: HoodieTableMetaClient)
+                                  val metaClient: HoodieTableMetaClient,
+                                  val bucketSpec: Option[BucketSpec] = None)
   extends BaseRelation with PrunedFilteredScan with Logging {
 
   private val conf = sqlContext.sparkContext.hadoopConfiguration
@@ -136,7 +139,7 @@ class MergeOnReadSnapshotRelation(val sqlContext: SQLContext,
     rdd.asInstanceOf[RDD[Row]]
   }
 
-  def buildFileIndex(filters: Array[Filter]): List[HoodieMergeOnReadFileSplit] = {
+  def buildFileIndex(filters: Array[Filter]): List[List[HoodieMergeOnReadFileSplit]] = {
 
     val fileStatuses = if (globPaths.isDefined) {
       // Load files from the global paths if it has defined to be compatible with the original mode
@@ -161,7 +164,7 @@ class MergeOnReadSnapshotRelation(val sqlContext: SQLContext,
     }
 
     if (fileStatuses.isEmpty) { // If this an empty table, return an empty split list.
-      List.empty[HoodieMergeOnReadFileSplit]
+      List.empty
     } else {
       val fsView = new HoodieTableFileSystemView(metaClient,
         metaClient.getActiveTimeline.getCommitsTimeline
@@ -179,10 +182,18 @@ class MergeOnReadSnapshotRelation(val sqlContext: SQLContext,
           val filePath = MergeOnReadSnapshotRelation.getFilePath(baseFile.getFileStatus.getPath)
 
           val partitionedFile = PartitionedFile(InternalRow.empty, filePath, 0, baseFile.getFileLen)
-          HoodieMergeOnReadFileSplit(Option(partitionedFile), logPaths, latestCommit,
-            metaClient.getBasePath, maxCompactionMemoryInBytes, mergeType)
+          (kv._1.getFileId, HoodieMergeOnReadFileSplit(Option(partitionedFile), logPaths, latestCommit,
+            metaClient.getBasePath, maxCompactionMemoryInBytes, mergeType))
         }).toList
-        fileSplits
+        bucketSpec.fold(fileSplits.map(e => List(e._2))) { spec =>
+          val bucketIdSplits = fileSplits
+            .map { case (fileId, split) => (BucketUtils.bucketIdFromFileId(fileId), split) }
+            .groupBy(_._1)
+            .map(e => (e._1, e._2.map(_._2)))
+          Seq.tabulate(spec.numBuckets) { bucketId =>
+            bucketIdSplits.getOrElse(bucketId, Nil)
+          }.toList
+        }
       }
     }
   }
