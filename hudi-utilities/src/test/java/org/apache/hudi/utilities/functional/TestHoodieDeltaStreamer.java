@@ -1640,44 +1640,37 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
   }
 
   @Test
-  public void testInsertOverwriteAndInsertOverwriteTable() throws Exception {
-    String tablePath = dfsBasePath + "/test_table";
-    // Initial BULK_INSERT
-    HoodieDeltaStreamer.Config config = TestHelpers.makeConfig(tablePath, WriteOperationType.BULK_INSERT);
-    new HoodieDeltaStreamer(config, jsc).sync();
-    long recordCount = sqlContext.read().format("org.apache.hudi").load(tablePath + "/*/*.parquet").count();
-    LOG.info("record count -> " + recordCount);
-    sqlContext.read().format("org.apache.hudi").load(tablePath).registerTempTable("tmp_trips");
-    recordCount =
-        sqlContext.sparkSession().sql("select * from tmp_trips where haversine_distance is not NULL").count();
-    LOG.info("distance record count -> " + recordCount);
-    TestHelpers.assertCommitMetadata("00000", tablePath, dfs, 1);
+  public void testInsertOverwrite() throws Exception {
+    String tableBasePath = dfsBasePath + "/insert_table";
+    // Initial bulk insert
+    HoodieDeltaStreamer.Config cfg = TestHelpers.makeConfig(tableBasePath, WriteOperationType.BULK_INSERT);
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
+    // insert overwrite with 0 records
+    cfg.sourceLimit = 0;
+    cfg.operation = WriteOperationType.INSERT_OVERWRITE;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
 
-    // INSERT_OVERWRITE
-    config.sourceLimit = 0;
-    new HoodieDeltaStreamer(config, jsc).sync();
-    config.operation = WriteOperationType.INSERT_OVERWRITE;
-    new HoodieDeltaStreamer(config, jsc).sync();
-    recordCount = sqlContext.read().format("org.apache.hudi").load(tablePath + "/*/*.parquet").count();
-    LOG.info("record count insert overwrite 0-> " + recordCount);
-    sqlContext.read().format("org.apache.hudi").load(tablePath).registerTempTable("tmp_trips");
-    recordCount =
-        sqlContext.sparkSession().sql("select * from tmp_trips where haversine_distance is not NULL").count();
-    LOG.info("distance record count insert overwrite 0 -> " + recordCount);
-    // TestHelpers.assertRecordCount(1000, tablePath + "/*/*.parquet", sqlContext);
-    TestHelpers.assertCommitMetadata("00000", tablePath, dfs, 1);
-    // TestHelpers.assertDistanceCount(1000, tablePath + "/*/*.parquet", sqlContext);
+  }
 
-    config.sourceLimit = 2000;
-    new HoodieDeltaStreamer(config, jsc).sync();
-    recordCount = sqlContext.read().format("org.apache.hudi").load(tablePath + "/*/*.parquet").count();
-    LOG.info("record count insert overwrite 2000 -> " + recordCount);
-    sqlContext.read().format("org.apache.hudi").load(tablePath).registerTempTable("tmp_trips");
-    recordCount =
-        sqlContext.sparkSession().sql("select * from tmp_trips where haversine_distance is not NULL").count();
-    LOG.info("distance record count insert overwrite 2000 -> " + recordCount);
-    // TestHelpers.assertRecordCount(2000, tablePath + "/*/*.parquet", sqlContext);
-    TestHelpers.assertCommitMetadata("00001", tablePath, dfs, 2);
+  @Test
+  public void testInsertOverwriteTable() throws Exception {
+    String tableBasePath = dfsBasePath + "/insert_table";
+    // Initial bulk insert
+    HoodieDeltaStreamer.Config cfg = TestHelpers.makeConfig(tableBasePath, WriteOperationType.BULK_INSERT);
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
+    // insert overwrite table with 0 records
+    cfg.sourceLimit = 0;
+    cfg.operation = WriteOperationType.INSERT_OVERWRITE_TABLE;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
+
   }
 
   /**
