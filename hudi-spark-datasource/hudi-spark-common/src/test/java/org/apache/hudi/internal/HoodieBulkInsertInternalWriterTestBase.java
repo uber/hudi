@@ -18,6 +18,7 @@
 
 package org.apache.hudi.internal;
 
+import org.apache.hudi.DataSourceWriteOptions;
 import org.apache.hudi.client.HoodieInternalWriteStatus;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.HoodieWriteStat;
@@ -25,6 +26,7 @@ import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.keygen.SimpleKeyGenerator;
 import org.apache.hudi.testutils.HoodieClientTestHarness;
 import org.apache.hudi.testutils.SparkDatasetTestUtils;
 
@@ -67,10 +69,14 @@ public class HoodieBulkInsertInternalWriterTestBase extends HoodieClientTestHarn
     cleanupResources();
   }
 
-  protected HoodieWriteConfig getWriteConfig() {
+  protected HoodieWriteConfig getWriteConfig(boolean populateMetaCols) {
     Properties properties = new Properties();
-    properties.setProperty(HoodieTableConfig.HOODIE_TABLE_RECORDKEY_FIELDS.key(), SparkDatasetTestUtils.RECORD_KEY_FIELD_NAME);
-    properties.setProperty(HoodieTableConfig.HOODIE_TABLE_PARTITION_COLUMNS_PROP.key(), SparkDatasetTestUtils.PARTITION_PATH_FIELD_NAME);
+    if (!populateMetaCols) {
+      properties.setProperty(DataSourceWriteOptions.KEYGENERATOR_CLASS_OPT_KEY().key(), SimpleKeyGenerator.class.getName());
+      properties.setProperty(DataSourceWriteOptions.RECORDKEY_FIELD_OPT_KEY().key(), SparkDatasetTestUtils.RECORD_KEY_FIELD_NAME);
+      properties.setProperty(DataSourceWriteOptions.PARTITIONPATH_FIELD_OPT_KEY().key(), SparkDatasetTestUtils.PARTITION_PATH_FIELD_NAME);
+      properties.setProperty(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.key(), "false");
+    }
     return getConfigBuilder(basePath).withProperties(properties).build();
   }
 

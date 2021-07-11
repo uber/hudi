@@ -59,7 +59,7 @@ public class TestHoodieDataSourceInternalWriter extends
   @MethodSource("bulkInsertTypeParams")
   public void testDataSourceWriter(boolean populateMetaColumns) throws Exception {
     // init config and table
-    HoodieWriteConfig cfg = getWriteConfig();
+    HoodieWriteConfig cfg = getWriteConfig(populateMetaColumns);
     String instantTime = "001";
     // init writer
     HoodieDataSourceInternalWriter dataSourceInternalWriter =
@@ -102,7 +102,7 @@ public class TestHoodieDataSourceInternalWriter extends
   @MethodSource("bulkInsertTypeParams")
   public void testMultipleDataSourceWrites(boolean populateMetaColumns) throws Exception {
     // init config and table
-    HoodieWriteConfig cfg = getWriteConfig();
+    HoodieWriteConfig cfg = getWriteConfig(populateMetaColumns);
     int partitionCounter = 0;
 
     // execute N rounds
@@ -148,7 +148,7 @@ public class TestHoodieDataSourceInternalWriter extends
   @MethodSource("bulkInsertTypeParams")
   public void testLargeWrites(boolean populateMetaColumns) throws Exception {
     // init config and table
-    HoodieWriteConfig cfg = getWriteConfig();
+    HoodieWriteConfig cfg = getWriteConfig(populateMetaColumns);
     int partitionCounter = 0;
 
     // execute N rounds
@@ -200,7 +200,7 @@ public class TestHoodieDataSourceInternalWriter extends
   @MethodSource("bulkInsertTypeParams")
   public void testAbort(boolean populateMetaColumns) throws Exception {
     // init config and table
-    HoodieWriteConfig cfg = getWriteConfig();
+    HoodieWriteConfig cfg = getWriteConfig(populateMetaColumns);
 
     String instantTime0 = "00" + 0;
     // init writer

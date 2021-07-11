@@ -22,9 +22,12 @@ import org.apache.hudi.ApiMaturityLevel;
 import org.apache.hudi.AvroConversionHelper;
 import org.apache.hudi.PublicAPIMethod;
 import org.apache.hudi.common.config.TypedProperties;
+import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.exception.HoodieKeyException;
 
 import org.apache.avro.generic.GenericRecord;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.package$;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -53,6 +56,8 @@ import scala.collection.JavaConverters;
  */
 public abstract class BuiltinKeyGenerator extends BaseKeyGenerator implements SparkKeyGeneratorInterface {
 
+  private static final Logger LOG = LogManager.getLogger(BuiltinKeyGenerator.class);
+
   private static final String STRUCT_NAME = "hoodieRowTopLevelField";
   private static final String NAMESPACE = "hoodieRow";
   private transient Function1<Object, Object> converterFn = null;
@@ -77,6 +82,7 @@ public abstract class BuiltinKeyGenerator extends BaseKeyGenerator implements Sp
   @PublicAPIMethod(maturity = ApiMaturityLevel.EVOLVING)
   public String getRecordKey(Row row) {
     if (null == converterFn) {
+      LOG.warn("Instantiating row converter fn 11 ");
       converterFn = AvroConversionHelper.createConverterToAvro(row.schema(), STRUCT_NAME, NAMESPACE);
     }
     GenericRecord genericRecord = (GenericRecord) converterFn.apply(row);
@@ -107,20 +113,17 @@ public abstract class BuiltinKeyGenerator extends BaseKeyGenerator implements Sp
    * @return the partition path.
    */
   public String getPartitionPath(InternalRow internalRow, StructType structType) {
-    Row row = null;
     try {
-      row = deserializeRow(getEncoder(structType), internalRow);
+      Row row = deserializeRow(getEncoder(structType), internalRow);
+      return getPartitionPath(row);
     } catch (Exception e) {
-      throw new IllegalStateException("Convertion of InternalRow to Row failed with exception " + e);
+      throw new HoodieIOException("Conversion of InternalRow to Row failed with exception " + e);
     }
-    return getPartitionPath(row);
   }
 
   private ExpressionEncoder getEncoder(StructType structType) {
     if (encoder == null) {
-      synchronized (this) {
-        encoder = getRowEncoder(structType);
-      }
+      encoder = getRowEncoder(structType);
     }
     return encoder;
   }
@@ -137,12 +140,12 @@ public abstract class BuiltinKeyGenerator extends BaseKeyGenerator implements Sp
       throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ClassNotFoundException {
     // TODO remove reflection if Spark 2.x support is dropped
     if (package$.MODULE$.SPARK_VERSION().startsWith("2.")) {
-      Method spark2method = encoder.getClass().getMethod("fromRow", Object.class);
+      Method spark2method = encoder.getClass().getMethod("fromRow", InternalRow.class);
       return (Row) spark2method.invoke(encoder, row);
     } else {
       Class<?> deserializerClass = Class.forName("org.apache.spark.sql.catalyst.encoders.ExpressionEncoder$Deserializer");
       Object deserializer = encoder.getClass().getMethod("createDeserializer").invoke(encoder);
-      Method aboveSpark2method = deserializerClass.getMethod("apply", Object.class);
+      Method aboveSpark2method = deserializerClass.getMethod("apply", InternalRow.class);
       return (Row) aboveSpark2method.invoke(deserializer, row);
     }
   }

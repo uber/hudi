@@ -18,13 +18,18 @@
 
 package org.apache.hudi.internal;
 
+import org.apache.hudi.DataSourceWriteOptions;
 import org.apache.hudi.client.HoodieInternalWriteStatus;
+import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.io.HoodieAppendOnlyRowCreateHandle;
 import org.apache.hudi.io.HoodieRowCreateHandle;
 import org.apache.hudi.keygen.BuiltinKeyGenerator;
+import org.apache.hudi.keygen.NonpartitionedKeyGenerator;
 import org.apache.hudi.keygen.SimpleKeyGenerator;
+import org.apache.hudi.keygen.factory.HoodieSparkKeyGeneratorFactory;
 import org.apache.hudi.table.HoodieTable;
 
 import org.apache.log4j.LogManager;
@@ -38,6 +43,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
 
 /**
@@ -62,15 +68,14 @@ public class BulkInsertDataInternalWriterHelper {
   private String fileIdPrefix;
   private int numFilesWritten = 0;
   private Map<String, HoodieRowCreateHandle> handles = new HashMap<>();
-  private final BuiltinKeyGenerator keyGenerator;
-  private final boolean simpleKeyGen;
+  private BuiltinKeyGenerator keyGenerator = null;
+  private boolean simpleKeyGen = false;
   private int simplePartitionFieldIndex = -1;
   private DataType simplePartitionFieldDataType;
 
   public BulkInsertDataInternalWriterHelper(HoodieTable hoodieTable, HoodieWriteConfig writeConfig,
                                             String instantTime, int taskPartitionId, long taskId, long taskEpochId, StructType structType,
-                                            boolean populateMetaColumns, boolean arePartitionRecordsSorted,
-                                            BuiltinKeyGenerator keyGenerator) {
+                                            boolean populateMetaColumns, boolean arePartitionRecordsSorted) {
     this.hoodieTable = hoodieTable;
     this.writeConfig = writeConfig;
     this.instantTime = instantTime;
@@ -81,13 +86,35 @@ public class BulkInsertDataInternalWriterHelper {
     this.populateMetaColumns = populateMetaColumns;
     this.arePartitionRecordsSorted = arePartitionRecordsSorted;
     this.fileIdPrefix = UUID.randomUUID().toString();
-    this.keyGenerator = keyGenerator;
-    if (!populateMetaColumns && keyGenerator instanceof SimpleKeyGenerator) {
-      simpleKeyGen = true;
-      simplePartitionFieldIndex = (Integer) structType.getFieldIndex((keyGenerator).getPartitionPathFields().get(0)).get();
-      simplePartitionFieldDataType = structType.fields()[simplePartitionFieldIndex].dataType();
+    if (!populateMetaColumns) {
+      this.keyGenerator = getKeyGenerator(writeConfig.getProps());
+      if (keyGenerator instanceof SimpleKeyGenerator) {
+        simpleKeyGen = true;
+        simplePartitionFieldIndex = (Integer) structType.getFieldIndex((keyGenerator).getPartitionPathFields().get(0)).get();
+        simplePartitionFieldDataType = structType.fields()[simplePartitionFieldIndex].dataType();
+      }
+    }
+  }
+
+  /**
+   * Instantiate {@link BuiltinKeyGenerator}.
+   *
+   * @param properties properties map.
+   * @return the key generator thus instantiated.
+   */
+  private BuiltinKeyGenerator getKeyGenerator(Properties properties) {
+    TypedProperties typedProperties = new TypedProperties();
+    typedProperties.putAll(properties);
+    if (properties.get(DataSourceWriteOptions.KEYGENERATOR_CLASS_OPT_KEY().key()).equals(NonpartitionedKeyGenerator.class.getName())) {
+      return null; // Do not instantiate NonPartitionKeyGen
     } else {
-      simpleKeyGen = false;
+      try {
+        return (BuiltinKeyGenerator) HoodieSparkKeyGeneratorFactory.createKeyGenerator(typedProperties);
+      } catch (ClassCastException cce) {
+        throw new HoodieIOException("Only those key gens implementing BuiltInKeyGenerator interface is supported in disabling meta columns path");
+      } catch (IOException e) {
+        throw new HoodieIOException("Key generator instantiation failed ", e);
+      }
     }
   }
 

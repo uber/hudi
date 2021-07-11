@@ -76,7 +76,7 @@ public class SimpleKeyGenerator extends BuiltinKeyGenerator {
         hiveStylePartitioning, partitionPathPositions);
   }
 
-  /*@Override
+  @Override
   public String getPartitionPath(InternalRow row, StructType structType) {
     buildFieldDataTypesMapIfNeeded(structType);
     partitionPathPositions.entrySet().forEach(entry -> {
@@ -86,5 +86,5 @@ public class SimpleKeyGenerator extends BuiltinKeyGenerator {
     });
     return RowKeyGeneratorHelper.getPartitionPathFromInternalRow(row, getPartitionPathFields(),
         hiveStylePartitioning, partitionPathPositions, partitionPathDataTypes);
-  }*/
+  }
 }

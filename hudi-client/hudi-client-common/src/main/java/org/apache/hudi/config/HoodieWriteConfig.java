@@ -571,7 +571,8 @@ public class HoodieWriteConfig extends HoodieConfig {
   }
 
   public boolean populateMetaColumns() {
-    return getBoolean(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS);
+    return Boolean.parseBoolean(getStringOrDefault(HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS,
+        HoodieTableConfig.HOODIE_POPULATE_META_COLUMNS.defaultValue()));
   }
 
   /**

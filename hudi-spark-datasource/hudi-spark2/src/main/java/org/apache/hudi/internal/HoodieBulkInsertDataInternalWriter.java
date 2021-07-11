@@ -18,13 +18,7 @@
 
 package org.apache.hudi.internal;
 
-import org.apache.hudi.DataSourceWriteOptions;
-import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.config.HoodieWriteConfig;
-import org.apache.hudi.exception.HoodieIOException;
-import org.apache.hudi.keygen.BuiltinKeyGenerator;
-import org.apache.hudi.keygen.NonpartitionedKeyGenerator;
-import org.apache.hudi.keygen.factory.HoodieSparkKeyGeneratorFactory;
 import org.apache.hudi.table.HoodieTable;
 
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -33,7 +27,6 @@ import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
 import org.apache.spark.sql.types.StructType;
 
 import java.io.IOException;
-import java.util.Properties;
 
 /**
  * Hoodie's Implementation of {@link DataWriter<InternalRow>}. This is used in data source implementation for bulk insert.
@@ -46,30 +39,7 @@ public class HoodieBulkInsertDataInternalWriter implements DataWriter<InternalRo
                                             String instantTime, int taskPartitionId, long taskId, long taskEpochId,
                                             StructType structType, boolean populateMetaColumns, boolean arePartitionRecordsSorted) {
     this.bulkInsertWriterHelper = new BulkInsertDataInternalWriterHelper(hoodieTable,
-        writeConfig, instantTime, taskPartitionId, taskId, taskEpochId, structType, populateMetaColumns, arePartitionRecordsSorted,
-        populateMetaColumns ? null : getKeyGenerator(writeConfig.getProps()));
-  }
-
-  /**
-   * Instantiate {@link BuiltinKeyGenerator}.
-   *
-   * @param properties properties map.
-   * @return the key generator thus instantiated.
-   */
-  private BuiltinKeyGenerator getKeyGenerator(Properties properties) {
-    TypedProperties typedProperties = new TypedProperties();
-    typedProperties.putAll(properties);
-    if (properties.get(DataSourceWriteOptions.KEYGENERATOR_CLASS_OPT_KEY().key()).equals(NonpartitionedKeyGenerator.class.getName())) {
-      return null;
-    } else {
-      try {
-        return (BuiltinKeyGenerator) HoodieSparkKeyGeneratorFactory.createKeyGenerator(typedProperties);
-      } catch (ClassCastException cce) {
-        throw new HoodieIOException("Only those key gens implementing BuiltInKeyGenerator interface is supported in disabling meta columns path");
-      } catch (IOException e) {
-        throw new HoodieIOException("Key generator instantiation failed ", e);
-      }
-    }
+        writeConfig, instantTime, taskPartitionId, taskId, taskEpochId, structType, populateMetaColumns, arePartitionRecordsSorted);
   }
 
   @Override

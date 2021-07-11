@@ -27,6 +27,7 @@ import org.apache.hudi.table.HoodieTable;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -70,7 +71,7 @@ public class TestHoodieBulkInsertDataInternalWriter extends
   @MethodSource("configParams")
   public void testDataInternalWriter(boolean sorted, boolean populateMetaColumns) throws Exception {
     // init config and table
-    HoodieWriteConfig cfg = getWriteConfig();
+    HoodieWriteConfig cfg = getWriteConfig(populateMetaColumns);
     HoodieTable table = HoodieSparkTable.create(cfg, context, metaClient);
     // execute N rounds
     for (int i = 0; i < 3; i++) {
@@ -112,17 +113,16 @@ public class TestHoodieBulkInsertDataInternalWriter extends
    * Issue some corrupted or wrong schematized InternalRow after few valid InternalRows so that global error is thrown. write batch 1 of valid records write batch2 of invalid records which is expected
    * to throw Global Error. Verify global error is set appropriately and only first batch of records are written to disk.
    */
-  @ParameterizedTest
-  @MethodSource("bulkInsertTypeParams")
-  public void testGlobalFailure(boolean populateMetaColumns) throws Exception {
+  @Test
+  public void testGlobalFailure() throws Exception {
     // init config and table
-    HoodieWriteConfig cfg = getWriteConfig();
+    HoodieWriteConfig cfg = getWriteConfig(true);
     HoodieTable table = HoodieSparkTable.create(cfg, context, metaClient);
     String partitionPath = HoodieTestDataGenerator.DEFAULT_PARTITION_PATHS[0];
 
     String instantTime = "001";
     HoodieBulkInsertDataInternalWriter writer = new HoodieBulkInsertDataInternalWriter(table, cfg, instantTime, RANDOM.nextInt(100000), RANDOM.nextLong(), RANDOM.nextLong(),
-        STRUCT_TYPE, populateMetaColumns, false);
+        STRUCT_TYPE, true, false);
 
     int size = 10 + RANDOM.nextInt(100);
     int totalFailures = 5;
@@ -158,7 +158,7 @@ public class TestHoodieBulkInsertDataInternalWriter extends
 
     // verify rows
     Dataset<Row> result = sqlContext.read().parquet(fileAbsPaths.get().toArray(new String[0]));
-    assertOutput(inputRows, result, instantTime, fileNames, populateMetaColumns);
+    assertOutput(inputRows, result, instantTime, fileNames, true);
   }
 
   private void writeRows(Dataset<Row> inputRows, HoodieBulkInsertDataInternalWriter writer)
