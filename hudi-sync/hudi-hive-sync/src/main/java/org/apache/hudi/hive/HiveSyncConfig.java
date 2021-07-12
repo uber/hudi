@@ -70,6 +70,9 @@ public class HiveSyncConfig implements Serializable {
           + "org.apache.hudi input format.")
   public Boolean usePreApacheInputFormat = false;
 
+  @Parameter(names = {"--bucket-spec"}, description = "Hive bucket spec", required = false)
+  public String bucketSpec;
+
   @Parameter(names = {"--use-jdbc"}, description = "Hive jdbc connect url")
   public Boolean useJdbc = true;
 
@@ -122,6 +125,7 @@ public class HiveSyncConfig implements Serializable {
     newConfig.partitionValueExtractorClass = cfg.partitionValueExtractorClass;
     newConfig.jdbcUrl = cfg.jdbcUrl;
     newConfig.tableName = cfg.tableName;
+    newConfig.bucketSpec = cfg.bucketSpec;
     newConfig.usePreApacheInputFormat = cfg.usePreApacheInputFormat;
     newConfig.useFileListingFromMetadata = cfg.useFileListingFromMetadata;
     newConfig.verifyMetadataFileListing = cfg.verifyMetadataFileListing;
@@ -139,6 +143,7 @@ public class HiveSyncConfig implements Serializable {
     return "HiveSyncConfig{"
       + "databaseName='" + databaseName + '\''
       + ", tableName='" + tableName + '\''
+      + ", bucketSpec='" + bucketSpec + '\''
       + ", baseFileFormat='" + baseFileFormat + '\''
       + ", hiveUser='" + hiveUser + '\''
       + ", hivePass='" + hivePass + '\''
