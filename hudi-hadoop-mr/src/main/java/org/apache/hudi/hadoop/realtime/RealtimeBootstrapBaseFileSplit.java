@@ -91,4 +91,18 @@ public class RealtimeBootstrapBaseFileSplit extends BootstrapBaseFileSplit imple
   public void setBasePath(String basePath) {
     this.basePath = basePath;
   }
+
+  public RealtimeBootstrapBaseFileSplit(FileSplit baseSplit, FileSplit bootstrapFileSplit) throws IOException {
+    super(baseSplit, bootstrapFileSplit);
+  }
+
+  @Override
+  public boolean getLogOnly() {
+    return false;
+  }
+
+  @Override
+  public void setLogOnly(boolean logOnly) {
+    // no-op
+  }
 }

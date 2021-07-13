@@ -317,6 +317,11 @@ public class FSUtils {
     return matcher.group(3);
   }
 
+  public static String getLogFileExtension(String fullName) {
+    Matcher matcher = LOG_FILE_PATTERN.matcher(fullName);
+    return matcher.find() ? ".log" : "";
+  }
+
   /**
    * Get the first part of the file name in the log file. That will be the fileId. Log file do not have instantTime in
    * the file name.

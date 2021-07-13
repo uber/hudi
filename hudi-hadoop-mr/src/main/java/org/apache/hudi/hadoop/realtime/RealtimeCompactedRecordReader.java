@@ -47,12 +47,19 @@ class RealtimeCompactedRecordReader extends AbstractRealtimeRecordReader
 
   protected final RecordReader<NullWritable, ArrayWritable> parquetReader;
   private final Map<String, HoodieRecord<? extends HoodieRecordPayload>> deltaRecordMap;
+  private boolean logOnlySplit;
+  private HoodieMergedLogReader logReader;
 
   public RealtimeCompactedRecordReader(RealtimeSplit split, JobConf job,
       RecordReader<NullWritable, ArrayWritable> realReader) throws IOException {
     super(split, job);
     this.parquetReader = realReader;
-    this.deltaRecordMap = getMergedLogRecordScanner().getRecords();
+    HoodieMergedLogRecordScanner hoodieMergedLogRecordScanner = getMergedLogRecordScanner();
+    this.deltaRecordMap = hoodieMergedLogRecordScanner.getRecords();
+    if (split.getLogOnly()) {
+      this.logOnlySplit = true;
+      this.logReader = new HoodieMergedLogReader(split, job, hoodieMergedLogRecordScanner);
+    }
   }
 
   /**
@@ -87,6 +94,10 @@ class RealtimeCompactedRecordReader extends AbstractRealtimeRecordReader
 
   @Override
   public boolean next(NullWritable aVoid, ArrayWritable arrayWritable) throws IOException {
+    // deal with logOnlySplits
+    if (logOnlySplit) {
+      return logReader.next(aVoid, arrayWritable);
+    }
     // Call the underlying parquetReader.next - which may replace the passed in ArrayWritable
     // with a new block of values
     boolean result = this.parquetReader.next(aVoid, arrayWritable);
@@ -159,26 +170,42 @@ class RealtimeCompactedRecordReader extends AbstractRealtimeRecordReader
 
   @Override
   public NullWritable createKey() {
+    if (logOnlySplit) {
+      return logReader.createKey();
+    }
     return parquetReader.createKey();
   }
 
   @Override
   public ArrayWritable createValue() {
+    if (logOnlySplit) {
+      return logReader.createValue();
+    }
     return parquetReader.createValue();
   }
 
   @Override
   public long getPos() throws IOException {
+    if (logOnlySplit) {
+      return logReader.getPos();
+    }
     return parquetReader.getPos();
   }
 
   @Override
   public void close() throws IOException {
-    parquetReader.close();
+    if (logOnlySplit) {
+      logReader.close();
+    } else {
+      parquetReader.close();
+    }
   }
 
   @Override
   public float getProgress() throws IOException {
+    if (logOnlySplit) {
+      return logReader.getProgress();
+    }
     return parquetReader.getProgress();
   }
 }

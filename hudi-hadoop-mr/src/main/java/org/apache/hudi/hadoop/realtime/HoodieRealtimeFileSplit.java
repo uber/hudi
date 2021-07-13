@@ -36,6 +36,8 @@ public class HoodieRealtimeFileSplit extends FileSplit implements RealtimeSplit 
 
   private String basePath;
 
+  private boolean logOnly;
+
   public HoodieRealtimeFileSplit() {
     super();
   }
@@ -82,6 +84,16 @@ public class HoodieRealtimeFileSplit extends FileSplit implements RealtimeSplit 
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
     readFromInput(in);
+  }
+
+  @Override
+  public boolean getLogOnly() {
+    return logOnly;
+  }
+
+  @Override
+  public void setLogOnly(boolean logOnly) {
+    this.logOnly = logOnly;
   }
 
   @Override

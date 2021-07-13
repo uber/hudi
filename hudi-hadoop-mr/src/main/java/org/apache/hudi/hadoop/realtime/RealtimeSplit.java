@@ -53,6 +53,12 @@ public interface RealtimeSplit extends InputSplitWithLocationInfo {
   String getBasePath();
 
   /**
+   * Return whether this split only contains log files.
+   * @return
+   */
+  boolean getLogOnly();
+
+  /**
    * Update Log File Paths.
    * @param deltaLogPaths
    */
@@ -70,10 +76,17 @@ public interface RealtimeSplit extends InputSplitWithLocationInfo {
    */
   void setBasePath(String basePath);
 
+  /**
+   * Set whether this split only contains log files.
+   * @param logOnly
+   */
+  void setLogOnly(boolean logOnly);
+
   default void writeToOutput(DataOutput out) throws IOException {
     InputSplitUtils.writeString(getBasePath(), out);
     InputSplitUtils.writeString(getMaxCommitTime(), out);
     out.writeInt(getDeltaLogPaths().size());
+    out.writeBoolean(getLogOnly());
     for (String logFilePath : getDeltaLogPaths()) {
       InputSplitUtils.writeString(logFilePath, out);
     }
@@ -82,6 +95,7 @@ public interface RealtimeSplit extends InputSplitWithLocationInfo {
   default void readFromInput(DataInput in) throws IOException {
     setBasePath(InputSplitUtils.readString(in));
     setMaxCommitTime(InputSplitUtils.readString(in));
+    setLogOnly(in.readBoolean());
     int totalLogFiles = in.readInt();
     List<String> deltaLogPaths = new ArrayList<>(totalLogFiles);
     for (int i = 0; i < totalLogFiles; i++) {

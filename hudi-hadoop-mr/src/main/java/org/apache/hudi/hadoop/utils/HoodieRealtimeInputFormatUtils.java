@@ -18,7 +18,6 @@
 
 package org.apache.hudi.hadoop.utils;
 
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.FileSlice;
@@ -35,10 +34,12 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
+import org.apache.hudi.hadoop.BaseFileWithLogsSplit;
 import org.apache.hudi.hadoop.BootstrapBaseFileSplit;
 import org.apache.hudi.hadoop.realtime.HoodieRealtimeFileSplit;
 import org.apache.hudi.hadoop.realtime.RealtimeBootstrapBaseFileSplit;
 
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
@@ -65,17 +66,36 @@ public class HoodieRealtimeInputFormatUtils extends HoodieInputFormatUtils {
   private static final Logger LOG = LogManager.getLogger(HoodieRealtimeInputFormatUtils.class);
 
   public static InputSplit[] getRealtimeSplits(Configuration conf, Stream<FileSplit> fileSplits) throws IOException {
+    // for all unique split parents, obtain all delta files based on delta commit timeline,
+    // grouped on file id
+    List<InputSplit> rtSplits = new ArrayList<>();
+    List<FileSplit> candidateFileSplits = fileSplits.collect(Collectors.toList());
+    // deal with incremental query
+    candidateFileSplits.stream().filter(f -> (f instanceof BaseFileWithLogsSplit) && ((BaseFileWithLogsSplit) f).isBelongToIncrementalSplit()).forEach(s -> {
+      BaseFileWithLogsSplit bs = (BaseFileWithLogsSplit)s;
+      try {
+        HoodieRealtimeFileSplit hoodieRealtimeFileSplit = new HoodieRealtimeFileSplit(bs, bs.getBasePath(), bs.getDeltaLogPaths(), bs.getMaxCommitTime());
+        hoodieRealtimeFileSplit.setLogOnly(bs.getBaseFilePath().isEmpty());
+        rtSplits.add(hoodieRealtimeFileSplit);
+      } catch (IOException e) {
+        throw new HoodieIOException("Error creating hoodie real time split", e);
+      }
+    });
+
+    // deal with snapShot query
     Map<Path, List<FileSplit>> partitionsToParquetSplits =
-        fileSplits.collect(Collectors.groupingBy(split -> split.getPath().getParent()));
+        candidateFileSplits.stream().filter(f -> {
+          if (f instanceof BaseFileWithLogsSplit) {
+            return !((BaseFileWithLogsSplit)f).isBelongToIncrementalSplit();
+          }
+          return true;
+        }).collect(Collectors.groupingBy(split -> split.getPath().getParent()));
     // TODO(vc): Should we handle also non-hoodie splits here?
     Map<Path, HoodieTableMetaClient> partitionsToMetaClient = getTableMetaClientByPartitionPath(conf, partitionsToParquetSplits.keySet());
 
     // Create file system cache so metadata table is only instantiated once. Also can benefit normal file listing if
     // partition path is listed twice so file groups will already be loaded in file system
     Map<HoodieTableMetaClient, HoodieTableFileSystemView> fsCache = new HashMap<>();
-    // for all unique split parents, obtain all delta files based on delta commit timeline,
-    // grouped on file id
-    List<InputSplit> rtSplits = new ArrayList<>();
     try {
       partitionsToParquetSplits.keySet().forEach(partitionPath -> {
         // for each partition path obtain the data & log file groupings, then map back to inputsplits
@@ -99,13 +119,20 @@ public class HoodieRealtimeInputFormatUtils extends HoodieInputFormatUtils {
 
         // subgroup splits again by file id & match with log files.
         Map<String, List<FileSplit>> groupedInputSplits = partitionsToParquetSplits.get(partitionPath).stream()
-            .collect(Collectors.groupingBy(split -> FSUtils.getFileId(split.getPath().getName())));
+            .collect(Collectors.groupingBy(split -> {
+              String fileName = split.getPath().getName();
+              // mor snapsht view may contains some raw log files, for example: if user use Hbase index, hudi will produce only log Files
+              if (split instanceof BaseFileWithLogsSplit && ((BaseFileWithLogsSplit) split).getBaseFilePath().isEmpty()) {
+                fileName = split.getPath().getName().substring(1, fileName.length() - 1);
+              }
+              return FSUtils.getFileId(fileName);
+            }));
         // Get the maxCommit from the last delta or compaction or commit - when bootstrapped from COW table
         String maxCommitTime = metaClient.getActiveTimeline().getTimelineOfActions(CollectionUtils.createSet(HoodieTimeline.COMMIT_ACTION,
             HoodieTimeline.ROLLBACK_ACTION, HoodieTimeline.DELTA_COMMIT_ACTION, HoodieTimeline.REPLACE_COMMIT_ACTION))
             .filterCompletedInstants().lastInstant().get().getTimestamp();
         latestFileSlices.forEach(fileSlice -> {
-          List<FileSplit> dataFileSplits = groupedInputSplits.get(fileSlice.getFileId());
+          List<FileSplit> dataFileSplits = groupedInputSplits.getOrDefault(fileSlice.getFileId(), new ArrayList<>());
           dataFileSplits.forEach(split -> {
             try {
               List<String> logFilePaths = fileSlice.getLogFiles().sorted(HoodieLogFile.getLogFileComparator())
@@ -120,6 +147,11 @@ public class HoodieRealtimeInputFormatUtils extends HoodieInputFormatUtils {
                     hosts, inMemoryHosts);
                 rtSplits.add(new RealtimeBootstrapBaseFileSplit(baseSplit, metaClient.getBasePath(),
                     logFilePaths, maxCommitTime, eSplit.getBootstrapFileSplit()));
+              } else if (split instanceof BaseFileWithLogsSplit) {
+                BaseFileWithLogsSplit bs = (BaseFileWithLogsSplit)split;
+                HoodieRealtimeFileSplit hoodieRealtimeFileSplit = new HoodieRealtimeFileSplit(bs, bs.getBasePath(), bs.getDeltaLogPaths(), bs.getMaxCommitTime());
+                hoodieRealtimeFileSplit.setLogOnly(bs.getBaseFilePath().isEmpty());
+                rtSplits.add(hoodieRealtimeFileSplit);
               } else {
                 rtSplits.add(new HoodieRealtimeFileSplit(split, metaClient.getBasePath(), logFilePaths, maxCommitTime));
               }

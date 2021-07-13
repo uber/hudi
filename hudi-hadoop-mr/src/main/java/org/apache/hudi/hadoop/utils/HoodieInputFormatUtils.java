@@ -24,10 +24,11 @@ import org.apache.hadoop.hive.ql.io.orc.OrcSerde;
 import org.apache.hudi.common.config.HoodieMetadataConfig;
 import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
-import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieCommitMetadata;
 import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.model.HoodiePartitionMetadata;
+import org.apache.hudi.common.model.HoodieBaseFile;
+import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.model.HoodieWriteStat;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieDefaultTimeline;
@@ -39,10 +40,11 @@ import org.apache.hudi.common.table.view.TableFileSystemView;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.exception.HoodieIOException;
-import org.apache.hudi.hadoop.FileStatusWithBootstrapBaseFile;
 import org.apache.hudi.hadoop.HoodieHFileInputFormat;
 import org.apache.hudi.hadoop.HoodieParquetInputFormat;
+import org.apache.hudi.hadoop.RealtimeFileStatus;
 import org.apache.hudi.hadoop.LocatedFileStatusWithBootstrapBaseFile;
+import org.apache.hudi.hadoop.FileStatusWithBootstrapBaseFile;
 import org.apache.hudi.hadoop.realtime.HoodieHFileRealtimeInputFormat;
 import org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat;
 
@@ -165,6 +167,10 @@ public class HoodieInputFormatUtils {
     }
     if (extension.equals(HoodieFileFormat.HFILE.getFileExtension())) {
       return getInputFormat(HoodieFileFormat.HFILE, realtime, conf);
+    }
+    // now we support read log file, try to find log file
+    if (FSUtils.getLogFileExtension(path).equals(HoodieFileFormat.HOODIE_LOG.getFileExtension()) && realtime) {
+      return getInputFormat(HoodieFileFormat.PARQUET, realtime, conf);
     }
     throw new HoodieIOException("Hoodie InputFormat not implemented for base file of type " + extension);
   }
@@ -425,6 +431,11 @@ public class HoodieInputFormatUtils {
 
   public static List<FileStatus> filterFileStatusForSnapshotMode(JobConf job, Map<String, HoodieTableMetaClient> tableMetaClientMap,
                                                                  List<Path> snapshotPaths) throws IOException {
+    return filterFileStatusForSnapshotMode(job, tableMetaClientMap, snapshotPaths, false);
+  }
+
+  public static List<FileStatus> filterFileStatusForSnapshotMode(JobConf job, Map<String, HoodieTableMetaClient> tableMetaClientMap,
+                                                                 List<Path> snapshotPaths, boolean includeLogFiles) throws IOException {
     HoodieLocalEngineContext engineContext = new HoodieLocalEngineContext(job);
     List<FileStatus> returns = new ArrayList<>();
 
@@ -445,10 +456,17 @@ public class HoodieInputFormatUtils {
         HoodieTableFileSystemView fsView = fsViewCache.computeIfAbsent(metaClient, tableMetaClient ->
             FileSystemViewManager.createInMemoryFileSystemViewWithTimeline(engineContext, tableMetaClient, buildMetadataConfig(job), timeline));
         List<HoodieBaseFile> filteredBaseFiles = new ArrayList<>();
+        List<HoodieLogFile> filteredLogFiles = new ArrayList<>();
         for (Path p : entry.getValue()) {
           String relativePartitionPath = FSUtils.getRelativePartitionPath(new Path(metaClient.getBasePath()), p);
           List<HoodieBaseFile> matched = fsView.getLatestBaseFiles(relativePartitionPath).collect(Collectors.toList());
           filteredBaseFiles.addAll(matched);
+          if (includeLogFiles) {
+            List<HoodieLogFile> logMatched = fsView.getLatestFileSlices(relativePartitionPath)
+                .filter(f -> !f.getBaseFile().isPresent() && f.getLatestLogFile().isPresent())
+                .map(fileSlice -> fileSlice.getLatestLogFile().get()).collect(Collectors.toList());
+            filteredLogFiles.addAll(logMatched);
+          }
         }
 
         LOG.info("Total paths to process after hoodie filter " + filteredBaseFiles.size());
@@ -458,6 +476,12 @@ public class HoodieInputFormatUtils {
           }
           filteredFile = refreshFileStatus(job, filteredFile);
           returns.add(getFileStatus(filteredFile));
+        }
+
+        for (HoodieLogFile logFile : filteredLogFiles) {
+          RealtimeFileStatus realtimeFileStatus = new RealtimeFileStatus(logFile.getFileStatus());
+          realtimeFileStatus.setLogFileOnly(true);
+          returns.add(realtimeFileStatus);
         }
       }
     } finally {

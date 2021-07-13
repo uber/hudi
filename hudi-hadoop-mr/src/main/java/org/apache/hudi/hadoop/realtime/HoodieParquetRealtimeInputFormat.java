@@ -18,13 +18,29 @@
 
 package org.apache.hudi.hadoop.realtime;
 
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hudi.common.model.FileSlice;
+import org.apache.hudi.common.model.HoodieFileGroup;
+import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieDefaultTimeline;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.ValidationUtils;
+import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.hadoop.RealtimeFileStatus;
+import org.apache.hudi.hadoop.PathWithLogFilePath;
+import org.apache.hudi.hadoop.HoodieEmptyRecordReader;
 import org.apache.hudi.hadoop.HoodieParquetInputFormat;
 import org.apache.hudi.hadoop.UseFileSplitsFromInputFormat;
+import org.apache.hudi.hadoop.UseRecordReaderFromInputFormat;
+import org.apache.hudi.hadoop.utils.HoodieHiveUtils;
 import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
 import org.apache.hudi.hadoop.utils.HoodieRealtimeInputFormatUtils;
 
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -36,12 +52,17 @@ import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hudi.hadoop.UseRecordReaderFromInputFormat;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
+
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -64,6 +85,122 @@ public class HoodieParquetRealtimeInputFormat extends HoodieParquetInputFormat i
     Stream<FileSplit> fileSplits = Arrays.stream(super.getSplits(job, numSplits)).map(is -> (FileSplit) is);
 
     return HoodieRealtimeInputFormatUtils.getRealtimeSplits(job, fileSplits);
+  }
+
+  /**
+   * keep the logical of mor_incr_view as same as spark datasource.
+   * to do: unify the incremental view code between hive/spark-sql and spark datasource
+   */
+  @Override
+  protected List<FileStatus> listStatusForIncrementalMode(
+      JobConf job, HoodieTableMetaClient tableMetaClient, List<Path> inputPaths) throws IOException {
+    List<FileStatus> result = new ArrayList<>();
+    String tableName = tableMetaClient.getTableConfig().getTableName();
+    Job jobContext = Job.getInstance(job);
+
+    Option<HoodieTimeline> timeline = HoodieInputFormatUtils.getFilteredCommitsTimeline(jobContext, tableMetaClient);
+    if (!timeline.isPresent()) {
+      return result;
+    }
+    String lastIncrementalTs = HoodieHiveUtils.readStartCommitTime(jobContext, tableName);
+    // Total number of commits to return in this batch. Set this to -1 to get all the commits.
+    Integer maxCommits = HoodieHiveUtils.readMaxCommits(jobContext, tableName);
+    HoodieTimeline commitsTimelineToReturn = timeline.get().findInstantsAfter(lastIncrementalTs, maxCommits);
+    Option<List<HoodieInstant>> commitsToCheck = Option.of(commitsTimelineToReturn.getInstants().collect(Collectors.toList()));
+    if (!commitsToCheck.isPresent()) {
+      return result;
+    }
+    Map<String, HashMap<String, FileStatus>> partitionsWithFileStatus  = HoodieInputFormatUtils
+        .listAffectedFilesForCommits(new Path(tableMetaClient.getBasePath()), commitsToCheck.get(), commitsTimelineToReturn);
+    // build fileGroup from fsView
+    List<FileStatus> affectedFileStatus = new ArrayList<>();
+    partitionsWithFileStatus.forEach((key, value) -> value.forEach((k, v) -> affectedFileStatus.add(v)));
+    HoodieTableFileSystemView fsView = new HoodieTableFileSystemView(tableMetaClient, commitsTimelineToReturn, affectedFileStatus.toArray(new FileStatus[0]));
+    // build fileGroup from fsView
+    String basePath = tableMetaClient.getBasePath();
+    // filter affectedPartition by inputPaths
+    List<String> affectedPartition = partitionsWithFileStatus.keySet().stream()
+        .filter(k -> k.isEmpty() ? inputPaths.contains(new Path(basePath)) : inputPaths.contains(new Path(basePath, k))).collect(Collectors.toList());
+    if (affectedPartition.isEmpty()) {
+      return result;
+    }
+    List<HoodieFileGroup> fileGroups = affectedPartition.stream()
+        .flatMap(partitionPath -> fsView.getAllFileGroups(partitionPath)).collect(Collectors.toList());
+    setInputPaths(job, affectedPartition.stream()
+        .map(p -> p.isEmpty() ? basePath : new Path(basePath, p).toUri().toString()).collect(Collectors.joining(",")));
+
+    // find all file status in current partitionPath
+    FileStatus[] fileStatuses = getStatus(job);
+    Map<String, FileStatus> candidateFileStatus = new HashMap<>();
+    for (int i = 0; i < fileStatuses.length; i++) {
+      String key = fileStatuses[i].getPath().toString();
+      candidateFileStatus.put(key, fileStatuses[i]);
+    }
+
+    String maxCommitTime = fsView.getLastInstant().get().getTimestamp();
+    fileGroups.stream().forEach(f -> {
+      try {
+        List<FileSlice> baseFiles = f.getAllFileSlices().filter(slice -> slice.getBaseFile().isPresent()).collect(Collectors.toList());
+        if (!baseFiles.isEmpty()) {
+          String baseFilePath = baseFiles.get(0).getBaseFile().get().getFileStatus().getPath().toUri().toString();
+          if (!candidateFileStatus.containsKey(baseFilePath)) {
+            throw new HoodieException("Error obtaining fileStatus for file: " + baseFilePath);
+          }
+          RealtimeFileStatus fileStatus = new RealtimeFileStatus(candidateFileStatus.get(baseFilePath));
+          fileStatus.setMaxCommitTime(maxCommitTime);
+          fileStatus.setBelongToIncrementalFileStatus(true);
+          fileStatus.setBasePath(basePath);
+          fileStatus.setBaseFilePath(baseFilePath);
+          fileStatus.setDeltaLogPaths(f.getLatestFileSlice().get().getLogFiles().map(l -> l.getPath().toString()).collect(Collectors.toList()));
+          result.add(fileStatus);
+        }
+        // add file group which has only logs.
+        if (f.getLatestFileSlice().isPresent() && baseFiles.isEmpty()) {
+          List<FileStatus> logFileStatus = f.getLatestFileSlice().get().getLogFiles().map(logFile -> logFile.getFileStatus()).collect(Collectors.toList());
+          if (logFileStatus.size() > 0) {
+            RealtimeFileStatus fileStatus = new RealtimeFileStatus(logFileStatus.get(0));
+            fileStatus.setLogFileOnly(true);
+            fileStatus.setBelongToIncrementalFileStatus(true);
+            fileStatus.setDeltaLogPaths(logFileStatus.stream().map(l -> l.getPath().toString()).collect(Collectors.toList()));
+            fileStatus.setMaxCommitTime(maxCommitTime);
+            fileStatus.setBasePath(basePath);
+            result.add(fileStatus);
+          }
+        }
+      } catch (IOException e) {
+        throw new HoodieException("Error obtaining data file/log file grouping ", e);
+      }
+    });
+    return result;
+  }
+
+  @Override
+  protected boolean includeLogFilesForSnapShortView() {
+    return false;
+  }
+
+  @Override
+  protected boolean isSplitable(FileSystem fs, Path filename) {
+    if (filename instanceof PathWithLogFilePath) {
+      return ((PathWithLogFilePath)filename).splitable();
+    }
+    return super.isSplitable(fs, filename);
+  }
+
+  @Override
+  protected FileSplit makeSplit(Path file, long start, long length, String[] hosts) {
+    if (file instanceof PathWithLogFilePath) {
+      return ((PathWithLogFilePath)file).buildSplit(file, start, length, hosts);
+    }
+    return super.makeSplit(file, start, length, hosts);
+  }
+
+  @Override
+  protected FileSplit makeSplit(Path file, long start, long length, String[] hosts, String[] inMemoryHosts) {
+    if (file instanceof PathWithLogFilePath) {
+      return ((PathWithLogFilePath)file).buildSplit(file, start, length, hosts);
+    }
+    return super.makeSplit(file, start, length, hosts, inMemoryHosts);
   }
 
   @Override
@@ -119,6 +256,11 @@ public class HoodieParquetRealtimeInputFormat extends HoodieParquetInputFormat i
     addProjectionToJobConf(realtimeSplit, jobConf);
     LOG.info("Creating record reader with readCols :" + jobConf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR)
         + ", Ids :" + jobConf.get(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR));
+
+    // for log only split, we no need parquet reader, set it to empty
+    if (realtimeSplit.getLogOnly()) {
+      return new HoodieRealtimeRecordReader(realtimeSplit, jobConf, new HoodieEmptyRecordReader());
+    }
     return new HoodieRealtimeRecordReader(realtimeSplit, jobConf,
         super.getRecordReader(split, jobConf, reporter));
   }
