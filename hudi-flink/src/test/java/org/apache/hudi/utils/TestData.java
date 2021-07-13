@@ -71,9 +71,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Data set for testing, also some utilities to check the results.
- */
+/** Data set for testing, also some utilities to check the results. */
 public class TestData {
   public static List<RowData> DATA_SET_INSERT = Arrays.asList(
       insertRow(StringData.fromString("id1"), StringData.fromString("Danny"), 23,
@@ -128,7 +126,6 @@ public class TestData {
   );
 
   public static List<RowData> DATA_SET_INSERT_DUPLICATES = new ArrayList<>();
-
   static {
     IntStream.range(0, 5).forEach(i -> DATA_SET_INSERT_DUPLICATES.add(
         insertRow(StringData.fromString("id1"), StringData.fromString("Danny"), 23,
@@ -136,7 +133,6 @@ public class TestData {
   }
 
   public static List<RowData> DATA_SET_INSERT_SAME_KEY = new ArrayList<>();
-
   static {
     IntStream.range(0, 5).forEach(i -> DATA_SET_INSERT_SAME_KEY.add(
         insertRow(StringData.fromString("id1"), StringData.fromString("Danny"), 23,
@@ -240,8 +236,8 @@ public class TestData {
   /**
    * Write a list of row data with Hoodie format base on the given configuration.
    *
-   * @param dataBuffer The data buffer to write
-   * @param conf       The flink configuration
+   * @param dataBuffer  The data buffer to write
+   * @param conf        The flink configuration
    * @throws Exception if error occurs
    */
   public static void writeData(
@@ -285,8 +281,8 @@ public class TestData {
    * Sort the {@code rows} using field at index {@code orderingPos} and asserts
    * it equals with the expected string {@code expected}.
    *
-   * @param rows        Actual result rows
-   * @param expected    Expected string of the sorted rows
+   * @param rows     Actual result rows
+   * @param expected Expected string of the sorted rows
    * @param orderingPos Field position for ordering
    */
   public static void assertRowsEquals(List<Row> rows, String expected, int orderingPos) {
@@ -423,8 +419,8 @@ public class TestData {
    *
    * <p>Note: Replace it with the Flink reader when it is supported.
    *
-   * @param basePath The file base to check, should be a directory
-   * @param expected The expected results mapping, the key should be the partition path
+   * @param basePath   The file base to check, should be a directory
+   * @param expected   The expected results mapping, the key should be the partition path
    */
   public static void checkWrittenFullData(
       File basePath,
@@ -468,12 +464,12 @@ public class TestData {
    *
    * <p>Note: Replace it with the Flink reader when it is supported.
    *
-   * @param fs            The file system
+   * @param fs         The file system
    * @param latestInstant The latest committed instant of current table
-   * @param baseFile      The file base to check, should be a directory
-   * @param expected      The expected results mapping, the key should be the partition path
-   * @param partitions    The expected partition number
-   * @param schema        The read schema
+   * @param baseFile   The file base to check, should be a directory
+   * @param expected   The expected results mapping, the key should be the partition path
+   * @param partitions The expected partition number
+   * @param schema     The read schema
    */
   public static void checkWrittenDataMOR(
       FileSystem fs,

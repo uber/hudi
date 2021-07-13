@@ -42,6 +42,11 @@ public class TestWriteMergeOnReadWithCompact extends TestWriteCopyOnWrite {
     conf.setInteger(FlinkOptions.COMPACTION_DELTA_COMMITS, 1);
   }
 
+  @Override
+  protected Map<String, String> getExpectedBeforeCheckpointComplete() {
+    return EXPECTED1;
+  }
+
   @Test
   public void testAppendOnly() throws Exception {
     conf.setBoolean(FlinkOptions.APPEND_ONLY_ENABLE, true);
