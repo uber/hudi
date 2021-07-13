@@ -1695,6 +1695,52 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     }
   }
 
+  @Test
+  public void testInsertOverwrite() throws Exception {
+    String tableBasePath = dfsBasePath + "/insert_table";
+    // Initial bulk insert
+    HoodieDeltaStreamer.Config cfg = TestHelpers.makeConfig(tableBasePath, WriteOperationType.BULK_INSERT);
+    cfg.sourceLimit = 1000;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
+    // insert overwrite with 0 records
+    cfg.sourceLimit = 0;
+    cfg.operation = WriteOperationType.INSERT_OVERWRITE;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
+    // insert overwrite with 1000 records in single partition
+    cfg.sourceLimit = 1000;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1950, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00001", tableBasePath, dfs, 2);
+  }
+
+  @Test
+  public void testInsertOverwriteTable() throws Exception {
+    String tableBasePath = dfsBasePath + "/insert_table";
+    // Initial bulk insert
+    HoodieDeltaStreamer.Config cfg = TestHelpers.makeConfig(tableBasePath, WriteOperationType.BULK_INSERT);
+    cfg.sourceLimit = 1000;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
+
+    // insert overwrite table with 0 records
+    cfg.sourceLimit = 0;
+    cfg.operation = WriteOperationType.INSERT_OVERWRITE_TABLE;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
+
+    // insert overwrite table with 1000 records on a single partition
+    cfg.sourceLimit = 1000;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1950, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00001", tableBasePath, dfs, 2);
+  }
+
   /**
    * UDF to calculate Haversine distance.
    */
