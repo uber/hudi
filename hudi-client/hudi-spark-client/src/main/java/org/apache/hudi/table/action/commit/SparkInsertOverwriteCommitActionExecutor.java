@@ -23,7 +23,6 @@ import org.apache.hudi.common.engine.HoodieEngineContext;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.HoodieRecordPayload;
 import org.apache.hudi.common.model.WriteOperationType;
-import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.table.HoodieTable;
 import org.apache.hudi.table.WorkloadProfile;
@@ -64,11 +63,6 @@ public class SparkInsertOverwriteCommitActionExecutor<T extends HoodieRecordPayl
   @Override
   protected Partitioner getPartitioner(WorkloadProfile profile) {
     return new SparkInsertOverwritePartitioner(profile, context, table, config);
-  }
-
-  @Override
-  protected String getCommitActionType() {
-    return HoodieTimeline.REPLACE_COMMIT_ACTION;
   }
 
   @Override

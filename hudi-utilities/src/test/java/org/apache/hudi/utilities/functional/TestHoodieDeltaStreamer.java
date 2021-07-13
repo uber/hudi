@@ -1711,10 +1711,10 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     TestHelpers.assertRecordCount(1000, tableBasePath + "/*/*.parquet", sqlContext);
     TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
     // insert overwrite with 1000 records in single partition
-    // cfg.sourceLimit = 1000;
-    // new HoodieDeltaStreamer(cfg, jsc).sync();
-    // TestHelpers.assertRecordCount(1950, tableBasePath + "/*/*.parquet", sqlContext);
-    // TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
+    cfg.sourceLimit = 1000;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1950, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00001", tableBasePath, dfs, 2);
   }
 
   @Test
@@ -1735,10 +1735,10 @@ public class TestHoodieDeltaStreamer extends UtilitiesTestBase {
     TestHelpers.assertCommitMetadata("00000", tableBasePath, dfs, 1);
 
     // insert overwrite table with 1000 records on a single partition
-    // cfg.sourceLimit = 1000;
-    // new HoodieDeltaStreamer(cfg, jsc).sync();
-    // TestHelpers.assertRecordCount(1950, tableBasePath + "/*/*.parquet", sqlContext);
-    // TestHelpers.assertCommitMetadata("00001", tableBasePath, dfs, 2);
+    cfg.sourceLimit = 1000;
+    new HoodieDeltaStreamer(cfg, jsc).sync();
+    TestHelpers.assertRecordCount(1950, tableBasePath + "/*/*.parquet", sqlContext);
+    TestHelpers.assertCommitMetadata("00001", tableBasePath, dfs, 2);
   }
 
   /**
